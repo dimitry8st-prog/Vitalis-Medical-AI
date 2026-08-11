@@ -2,7 +2,7 @@
   "name": "vitalis",
   "version": "1.0.0",
   "private": true,
-  "description": "Vitalis — там где жизнь встречается с вечностью",
+  "description": "Vitalis — там где понимание становится практикой, а знания — стандартом",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

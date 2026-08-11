@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vitalis — там где жизнь встречается с вечностью</title>
-<meta name="description" content="Система Vitalis — там где жизнь встречается с вечностью. Клинические рекомендации: РФ и международные.">
+<title>Vitalis — там где понимание становится практикой, а знания — стандартом</title>
+<meta name="description" content="Система Vitalis — там где понимание становится практикой, а знания — стандартом. Клинические рекомендации: РФ и международные.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -21,9 +21,14 @@ a{color:inherit;text-decoration:none}
 header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--line);background:rgba(250,251,253,.92);backdrop-filter:blur(10px);position:sticky;top:0;z-index:10}
 .logo{display:flex;align-items:center;gap:10px;font-family:var(--dp);font-weight:800;font-size:20px}
 .lm{width:30px;height:30px;border-radius:8px;background:var(--navy);display:flex;align-items:center;justify-content:center}
-.nav a{font-size:14px;font-weight:500;color:var(--slate);margin-left:18px}
+.nav a{font-size:14px;font-weight:500;color:var(--slate);margin-left:10px}
 .nav a:hover{color:var(--navy)}
+.nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .badge{font-family:var(--mn);font-size:11px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--slate)}
+.mode-switch{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:#fff}
+.mode-switch button{font-family:var(--mn);font-size:11px;padding:6px 12px;border:none;background:transparent;color:var(--slate);cursor:pointer}
+.mode-switch button.active{background:var(--navy);color:#fff}
+.mode-switch button:disabled{opacity:.45;cursor:not-allowed}
 main{flex:1;display:grid;grid-template-columns:1fr 1.15fr;gap:0;min-height:0}
 @media(max-width:960px){main{grid-template-columns:1fr}}
 .panel{padding:24px;overflow:auto}
@@ -79,6 +84,10 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
   </a>
   <div class="nav">
     <span class="badge" id="modeBadge">Система Vitalis…</span>
+    <div class="mode-switch" title="Переключение режима ответов">
+      <button type="button" id="btnDemo" onclick="setLlmMode('mock')">Demo</button>
+      <button type="button" id="btnLive" onclick="setLlmMode('live')">Live</button>
+    </div>
     <a href="/">Лендинг</a>
   </div>
 </header>
@@ -133,16 +142,54 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 </main>
 <script>
 const API = '/api/ai';
+let healthState = { llm_mode: 'mock', keys_ready: false };
+
+function applyModeUi(d){
+  healthState = d;
+  const live = d.llm_mode === 'live' ? 'online' : 'demo';
+  const keys = d.keys_ready ? 'keys✓' : 'keys✗';
+  document.getElementById('modeBadge').textContent =
+    `Система Vitalis · ${live} · база ${d.vault_chunks} · веб ${d.web_search} · ${keys}`;
+  const demoBtn = document.getElementById('btnDemo');
+  const liveBtn = document.getElementById('btnLive');
+  demoBtn.classList.toggle('active', d.llm_mode === 'mock');
+  liveBtn.classList.toggle('active', d.llm_mode === 'live');
+  liveBtn.disabled = !d.keys_ready && d.llm_mode !== 'live';
+  liveBtn.title = d.keys_ready
+    ? 'Живые модели (GigaChat / DeepSeek)'
+    : 'Нужны ключи API в .env';
+}
 
 async function refreshHealth(){
   try{
     const r = await fetch(API + '/health');
     const d = await r.json();
-    const live = d.llm_mode === 'live' ? 'online' : 'demo';
-    document.getElementById('modeBadge').textContent =
-      `Система Vitalis · ${live} · база ${d.vault_chunks} · веб ${d.web_search}`;
+    applyModeUi(d);
   }catch{
     document.getElementById('modeBadge').textContent = 'Система Vitalis · offline';
+  }
+}
+
+async function setLlmMode(mode){
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try{
+    const r = await fetch(API + '/mode', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ llm_mode: mode }),
+    });
+    const d = await r.json();
+    if(!r.ok){
+      const msg = d.detail || d.error || 'Не удалось сменить режим';
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    await refreshHealth();
+    document.getElementById('status').textContent =
+      mode === 'live' ? 'Режим Live включён' : 'Режим Demo включён';
+  }catch(e){
+    err.textContent = e.message || String(e);
+    await refreshHealth();
   }
 }
 
@@ -205,7 +252,7 @@ function renderSources(containerId, sources, label){
   src.innerHTML = `<h5>${label}</h5>`;
   const list = sources || [];
   if(!list.length){
-    src.innerHTML += '<div>Надёжные источники в этом контуре не найдены — модель должна была сообщить об этом явно.</div>';
+    src.innerHTML += '<div>Источники по этому контуру не найдены.</div>';
     return;
   }
   list.forEach(s=>{
