@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
@@ -43,14 +45,18 @@ async def web_search(
         scope=scope,
         en_focus=en_focus,
     )
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(6 if scope == "rf" else 5)
 
     async def run_one(item: tuple[str, str, str]) -> tuple[list[dict[str, Any]], str, str]:
         q, lang, kind = item
         async with semaphore:
             try:
                 batch = await asyncio.wait_for(
-                    _run_provider(provider, q, settings, max_results),
+                    (
+                        _run_rf_provider(provider, q, settings, max_results)
+                        if lang == "ru"
+                        else _run_provider(provider, q, settings, max_results)
+                    ),
                     timeout=12.0,
                 )
             except Exception:
@@ -83,6 +89,8 @@ def _merge(
         item = dict(item)
         item["lang"] = lang
         item["query_kind"] = kind
+        if lang == "ru":
+            item["source_tier"] = _rf_source_tier(str(item.get("url") or ""))
         url = (item.get("url") or "").strip()
         key = url or f"{item.get('title')}|{item.get('snippet')}"
         if not key or key in seen:
@@ -102,6 +110,7 @@ def _build_queries(
     year = datetime.now().year
     prev = year - 1
     focus = _extract_focus(query)
+    ru_focus = _canonical_ru_focus(focus)
     en_focus = en_focus or _english_variant(focus)
     intent_ru, intent_en = _detect_intent(query)
     out: list[tuple[str, str, str]] = []
@@ -109,15 +118,16 @@ def _build_queries(
     if scope in ("rf", "both"):
         out.extend(
             [
-                (f'"{focus}" клинические рекомендации Минздрав', "ru", "rf_guideline"),
-                (f'site:cr.minzdrav.gov.ru "{focus}"', "ru", "rf_registry"),
-                (f'"{focus}" НМИЦ {intent_ru} клинический обзор', "ru", "rf_institute"),
-                (f'"{focus}" {intent_ru} медицинский журнал обзор рекомендации', "ru", "rf_journal"),
+                (f'site:cr.minzdrav.gov.ru {ru_focus} {intent_ru}', "ru", "rf_registry"),
+                (f'{ru_focus} {intent_ru} клинические рекомендации РФ Минздрав', "ru", "rf_guideline"),
+                (f'{ru_focus} клинические рекомендации РФ filetype:pdf', "ru", "rf_guideline_pdf"),
+                (f'{ru_focus} {intent_ru} НМИЦ профессиональное общество рекомендации', "ru", "rf_institute"),
+                (f'{ru_focus} {intent_ru} клинический обзор медицинский журнал', "ru", "rf_journal"),
             ]
         )
         if freshness_extra:
             out.append(
-                (f'"{focus}" клинические рекомендации {prev} OR {year}', "ru", "rf_freshness")
+                (f'{ru_focus} клинические рекомендации {prev} OR {year}', "ru", "rf_freshness")
             )
 
     if bilingual and scope in ("intl", "both"):
@@ -164,6 +174,39 @@ async def _run_provider(
     if primary:
         return primary
     return await _bing_rss(query, max_results)
+
+
+async def _run_rf_provider(
+    provider: str,
+    query: str,
+    settings: Settings,
+    max_results: int,
+) -> list[dict[str, Any]]:
+    """RF-only fallback chain; the international contour stays unchanged."""
+    tasks = {
+        asyncio.create_task(_run_provider(provider, query, settings, max_results)),
+        asyncio.create_task(_duckduckgo_html(query, max_results)),
+        asyncio.create_task(_brave_html(query, max_results)),
+    }
+    done, pending = await asyncio.wait(tasks, timeout=11.0)
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for task in done:
+        try:
+            batch = task.result()
+        except Exception:
+            continue
+        for item in batch:
+            key = str(item.get("url") or "").strip()
+            if key and key not in seen:
+                seen.add(key)
+                rows.append(item)
+    return rows
 
 
 _RU_EN_TERMS = {
@@ -221,6 +264,20 @@ _RU_EN_PATTERNS = (
     (r"рак\w*\s+предстательн\w*\s+желез\w*", "prostate cancer"),
 )
 
+_RU_CANONICAL_PATTERNS = (
+    (r"ишемическ\w*\s+инсульт\w*", "ишемический инсульт"),
+    (r"геморрагическ\w*\s+инсульт\w*", "геморрагический инсульт"),
+    (r"черепно[- ]мозгов\w*\s+травм\w*", "черепно-мозговая травма"),
+    (r"рассеянн\w*\s+склероз\w*", "рассеянный склероз"),
+    (r"болезн\w*\s+паркинсон\w*", "болезнь Паркинсона"),
+    (r"болезн\w*\s+альцгеймер\w*", "болезнь Альцгеймера"),
+    (r"сердечн\w*\s+недостаточност\w*", "сердечная недостаточность"),
+    (r"фибрилляц\w*\s+предсерди\w*", "фибрилляция предсердий"),
+    (r"хроническ\w*\s+болезн\w*\s+почек", "хроническая болезнь почек"),
+    (r"рак\w*\s+молочн\w*\s+желез\w*", "рак молочной железы"),
+    (r"рак\w*\s+предстательн\w*\s+желез\w*", "рак предстательной железы"),
+)
+
 _INTENT_TERMS = (
     (r"леч|терап|препарат|дозиров", "лечение", "treatment"),
     (r"диагност|обследован|скрининг", "диагностика", "diagnosis"),
@@ -256,6 +313,15 @@ def _extract_focus(query: str) -> str:
     )
     text = re.sub(r"\s+", " ", text).strip(" ?!.,:;")
     return text or (query or "").strip()
+
+
+def _canonical_ru_focus(focus: str) -> str:
+    """Normalize frequent inflected diagnoses; otherwise keep unquoted user keywords."""
+    low = (focus or "").lower()
+    for pattern, canonical in _RU_CANONICAL_PATTERNS:
+        if re.search(pattern, low):
+            return canonical
+    return re.sub(r"[^0-9A-Za-zА-Яа-яЁё. -]+", " ", focus).strip()
 
 
 def _english_variant(query: str) -> str:
@@ -378,13 +444,22 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         word for word in re.findall(r"[a-zа-яё0-9]{4,}", focus.lower())
         if word not in {"клинические", "рекомендации", "лечение", "диагностика"}
     }
-    overlap = sum(1 for word in words if word in haystack)
+    overlap = sum(
+        1
+        for word in words
+        if word in haystack
+        or (
+            re.search(r"[а-яё]", word)
+            and len(word) >= 7
+            and word[:6] in haystack
+        )
+    )
     authority = 0
     tiers = (
         (5, ("cr.minzdrav.gov.ru", "minzdrav.gov.ru", "who.int", "nice.org.uk")),
         (4, ("nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov", "europepmc.org", "cochranelibrary.com", "nejm.org", "thelancet.com", "jamanetwork.com", "bmj.com", "nature.com")),
         (3, ("escardio.org", "heart.org", "acc.org", "idsociety.org", "nccn.org", "eular.org", "ersnet.org")),
-        (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "oncology.ru", "almazovcentre.ru", "gnicpm.ru", "mediasphera.ru", "rnmot.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru")),
+        (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "oncology.ru", "almazovcentre.ru", "gnicpm.ru", "mediasphera.ru", "journals.eco-vector.com", "rnmot.ru", "neurology.ru", "elibrary.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru", "rehabrus.ru", "medpoint.pro", "diseases.medelement.com", "evidence-neurology.ru", "consultant.ru", "garant.ru")),
     )
     for points, domains in tiers:
         if any(domain in url for domain in domains):
@@ -392,7 +467,12 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
             break
     year = item.get("year") or 0
     freshness = 2 if year >= datetime.now().year - 2 else 1 if year >= datetime.now().year - 5 else 0
-    return float(overlap * 2 + authority + freshness)
+    mismatch = 0
+    if "ишемич" in focus.lower() and "геморраг" in haystack:
+        mismatch = 8
+    elif "геморраг" in focus.lower() and "ишемич" in haystack:
+        mismatch = 8
+    return float(overlap * 2 + authority + freshness - mismatch)
 
 
 def _balanced_results(
@@ -404,10 +484,18 @@ def _balanced_results(
         reverse=True,
     )
     if scope == "rf":
-        return [item for item in ranked if item.get("lang") == "ru"][: max_results * 2]
+        return [
+            item
+            for item in ranked
+            if item.get("lang") == "ru" and item.get("relevance_score", 0) > 0
+        ][: max_results * 2]
     if scope == "intl":
         return [item for item in ranked if item.get("lang") == "en"][: max_results * 2]
-    ru = [item for item in ranked if item.get("lang") == "ru"][:max_results]
+    ru = [
+        item
+        for item in ranked
+        if item.get("lang") == "ru" and item.get("relevance_score", 0) > 0
+    ][:max_results]
     en = [item for item in ranked if item.get("lang") == "en"][:max_results]
     return sorted(
         ru + en,
@@ -493,6 +581,130 @@ async def _bing_rss(query: str, max_results: int) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+async def _duckduckgo_html(query: str, max_results: int) -> list[dict[str, Any]]:
+    """Independent RF fallback when the DDGS package and Bing RSS return no rows."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Vitalis/1.0",
+                "Accept-Language": "ru-RU,ru;q=0.9",
+            },
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query, "kl": "ru-ru"},
+            )
+            response.raise_for_status()
+            body = response.text
+    except Exception:
+        return []
+
+    anchors = re.findall(
+        r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+        body,
+        flags=re.I | re.S,
+    )
+    snippets = re.findall(
+        r'<(?:a|div)[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>',
+        body,
+        flags=re.I | re.S,
+    )
+    out: list[dict[str, Any]] = []
+    for index, (raw_url, raw_title) in enumerate(anchors[:max_results]):
+        out.append(
+            {
+                "title": _strip_html(raw_title),
+                "url": _decode_ddg_url(html.unescape(raw_url)),
+                "snippet": _strip_html(snippets[index]) if index < len(snippets) else "",
+                "provider": "duckduckgo_html",
+            }
+        )
+    return [row for row in out if row["url"]]
+
+
+async def _brave_html(query: str, max_results: int) -> list[dict[str, Any]]:
+    """Public HTML fallback for RF discovery; no API key and no answer generation."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "Accept-Language": "ru-RU,ru;q=0.9",
+            },
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(
+                "https://search.brave.com/search",
+                params={"q": query, "source": "web"},
+            )
+            response.raise_for_status()
+            body = response.text
+    except Exception:
+        return []
+
+    out: list[dict[str, Any]] = []
+    blocks = re.split(
+        r'<div class="snippet[^\"]*"[^>]+data-type="web"[^>]*>',
+        body,
+        flags=re.I,
+    )[1:]
+    for block in blocks:
+        match = re.search(
+            r'<a href="(https?://[^\"]+)"[^>]*class="[^\"]*\bl1\b[^\"]*"[^>]*>'
+            r'.*?<div class="title search-snippet-title[^\"]*" title="([^\"]+)"',
+            block,
+            flags=re.I | re.S,
+        )
+        if not match:
+            continue
+        snippet_match = re.search(
+            r'<div class="generic-snippet[^\"]*">.*?<div class="content[^\"]*">(.*?)</div>',
+            block,
+            flags=re.I | re.S,
+        )
+        out.append(
+            {
+                "title": html.unescape(match.group(2)).strip(),
+                "url": html.unescape(match.group(1)).strip(),
+                "snippet": _strip_html(snippet_match.group(1)) if snippet_match else "",
+                "provider": "brave_html",
+            }
+        )
+        if len(out) >= max_results:
+            break
+    return out
+
+
+def _strip_html(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", value or ""))).strip()
+
+
+def _decode_ddg_url(value: str) -> str:
+    if value.startswith("//"):
+        value = f"https:{value}"
+    parsed = urlparse(value)
+    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+        target = parse_qs(parsed.query).get("uddg", [""])[0]
+        return unquote(target) if target else ""
+    return value
+
+
+def _rf_source_tier(url: str) -> str:
+    host = (urlparse(url or "").hostname or "").lower()
+    matches = lambda domain: host == domain or host.endswith(f".{domain}")
+    if any(matches(domain) for domain in ("cr.minzdrav.gov.ru", "minzdrav.gov.ru")):
+        return "official"
+    if any(matches(domain) for domain in ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "almazovcentre.ru", "gnicpm.ru", "rnmot.ru", "oncology.ru", "neurology.ru")):
+        return "institute_or_society"
+    if any(matches(domain) for domain in ("mediasphera.ru", "journals.eco-vector.com", "elibrary.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru")):
+        return "peer_reviewed_literature"
+    if any(matches(domain) for domain in ("rehabrus.ru", "medpoint.pro", "diseases.medelement.com", "evidence-neurology.ru", "consultant.ru", "garant.ru")):
+        return "trusted_mirror"
+    return "other"
 
 
 async def _wikipedia(query: str, lang: str, max_results: int = 2) -> list[dict[str, Any]]:
