@@ -116,18 +116,21 @@ def _build_queries(
     out: list[tuple[str, str, str]] = []
 
     if scope in ("rf", "both"):
+        rf_focus = _rf_search_focus(query)
+        profile = _rf_profile_hint(rf_focus)
         out.extend(
             [
-                (f'site:cr.minzdrav.gov.ru {ru_focus} {intent_ru}', "ru", "rf_registry"),
-                (f'{ru_focus} {intent_ru} клинические рекомендации РФ Минздрав', "ru", "rf_guideline"),
-                (f'{ru_focus} клинические рекомендации РФ filetype:pdf', "ru", "rf_guideline_pdf"),
-                (f'{ru_focus} {intent_ru} НМИЦ профессиональное общество рекомендации', "ru", "rf_institute"),
-                (f'{ru_focus} {intent_ru} клинический обзор медицинский журнал', "ru", "rf_journal"),
+                (f"{rf_focus} клинические рекомендации Минздрав РФ", "ru", "rf_guideline"),
+                (f"site:cr.minzdrav.gov.ru {ru_focus} {intent_ru}", "ru", "rf_registry"),
+                (f"{ru_focus} клинические рекомендации РФ filetype:pdf", "ru", "rf_guideline_pdf"),
+                (f"{rf_focus} {intent_ru} {profile} НМИЦ", "ru", "rf_institute"),
+                (f"{rf_focus} {intent_ru} российское профессиональное медицинское общество рекомендации", "ru", "rf_society"),
+                (f"{rf_focus} {intent_ru} {profile} медицинский журнал обзор", "ru", "rf_journal"),
             ]
         )
         if freshness_extra:
             out.append(
-                (f'{ru_focus} клинические рекомендации {prev} OR {year}', "ru", "rf_freshness")
+                (f"{rf_focus} клинические рекомендации {prev} OR {year}", "ru", "rf_freshness")
             )
 
     if bilingual and scope in ("intl", "both"):
@@ -152,6 +155,46 @@ def _build_queries(
             seen.add(key)
             deduped.append(item)
     return deduped
+
+
+_RF_SEARCH_STOPWORDS = {
+    "актуальным", "актуальные", "действующим", "клиническим", "клинические",
+    "рекомендациям", "рекомендации", "российским", "российские", "пациента",
+    "пациенту", "пожалуйста", "расскажите", "назначить", "нужно", "можно",
+    "следует", "какие", "какой", "какая",
+}
+
+
+def _rf_search_focus(query: str, max_terms: int = 8) -> str:
+    """Return compact clinical terms instead of an over-specific quoted question."""
+    focus = _extract_focus(query)
+    tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9.-]{3,}", focus)
+    useful = [token for token in tokens if token.lower() not in _RF_SEARCH_STOPWORDS]
+    codes = re.findall(r"\b[A-Z]\d{2}(?:\.\d+)?\b", query or "", flags=re.I)
+    selected: list[str] = []
+    seen_terms: set[str] = set()
+    for token in useful + [code.upper() for code in codes]:
+        key = token.lower()
+        if key not in seen_terms:
+            selected.append(token)
+            seen_terms.add(key)
+    return " ".join(selected[:max_terms]) or focus
+
+
+def _rf_profile_hint(focus: str) -> str:
+    low = focus.lower()
+    profiles = (
+        (r"инсульт|невролог|эпилеп|мигрен|паркинсон|альцгеймер|рассеянн", "неврология"),
+        (r"серд|карди|инфаркт|гипертен|аритми|фибрилляц", "кардиология"),
+        (r"онколог|рак|опухол", "онкология"),
+        (r"пневмон|астм|бронх|л[её]гк", "пульмонология"),
+        (r"диабет|эндокрин|щитовид", "эндокринология"),
+        (r"травм|перелом|позвоноч", "травматология ортопедия"),
+    )
+    for pattern, label in profiles:
+        if re.search(pattern, low):
+            return label
+    return "профильный федеральный медицинский центр"
 
 
 async def _run_provider(
@@ -465,6 +508,15 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         if any(domain in url for domain in domains):
             authority = points
             break
+    kind_bonus = {
+        "rf_registry": 4,
+        "rf_guideline": 3,
+        "rf_guideline_pdf": 3,
+        "rf_institute": 2,
+        "rf_society": 2,
+        "rf_journal": 1,
+    }.get(str(item.get("query_kind") or ""), 0)
+    international_penalty = 6 if item.get("lang") == "ru" and _is_international_url(url) else 0
     year = item.get("year") or 0
     freshness = 2 if year >= datetime.now().year - 2 else 1 if year >= datetime.now().year - 5 else 0
     mismatch = 0
@@ -472,7 +524,44 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         mismatch = 8
     elif "геморраг" in focus.lower() and "ишемич" in haystack:
         mismatch = 8
-    return float(overlap * 2 + authority + freshness - mismatch)
+    return float(
+        overlap * 2
+        + authority
+        + freshness
+        + kind_bonus
+        - international_penalty
+        - mismatch
+    )
+
+
+def _is_international_url(url: str) -> bool:
+    domains = (
+        "who.int", "nice.org.uk", "nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov",
+        "europepmc.org", "cochranelibrary.com", "escardio.org", "heart.org", "acc.org",
+    )
+    return any(domain in (url or "").lower() for domain in domains)
+
+
+def _select_with_kind_quotas(
+    ranked: list[dict[str, Any]], kinds: tuple[str, ...], limit: int
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    selected_keys: set[str] = set()
+    for kind in kinds:
+        candidate = next((item for item in ranked if item.get("query_kind") == kind), None)
+        if candidate:
+            key = str(candidate.get("url") or f"{candidate.get('title')}|{candidate.get('snippet')}")
+            if key not in selected_keys:
+                selected.append(candidate)
+                selected_keys.add(key)
+    for item in ranked:
+        key = str(item.get("url") or f"{item.get('title')}|{item.get('snippet')}")
+        if key not in selected_keys:
+            selected.append(item)
+            selected_keys.add(key)
+        if len(selected) >= limit:
+            break
+    return selected[:limit]
 
 
 def _balanced_results(
@@ -483,19 +572,25 @@ def _balanced_results(
         key=lambda item: (item.get("relevance_score", 0), item.get("year") or 0),
         reverse=True,
     )
+    rf_ranked = [
+        item for item in ranked
+        if item.get("lang") == "ru"
+        and item.get("relevance_score", 0) > 0
+        and not _is_international_url(str(item.get("url") or ""))
+    ]
+    rf_kinds = (
+        "rf_registry",
+        "rf_guideline",
+        "rf_guideline_pdf",
+        "rf_institute",
+        "rf_society",
+        "rf_journal",
+    )
     if scope == "rf":
-        return [
-            item
-            for item in ranked
-            if item.get("lang") == "ru" and item.get("relevance_score", 0) > 0
-        ][: max_results * 2]
+        return _select_with_kind_quotas(rf_ranked, rf_kinds, max_results * 2)
     if scope == "intl":
         return [item for item in ranked if item.get("lang") == "en"][: max_results * 2]
-    ru = [
-        item
-        for item in ranked
-        if item.get("lang") == "ru" and item.get("relevance_score", 0) > 0
-    ][:max_results]
+    ru = _select_with_kind_quotas(rf_ranked, rf_kinds, max_results)
     en = [item for item in ranked if item.get("lang") == "en"][:max_results]
     return sorted(
         ru + en,
