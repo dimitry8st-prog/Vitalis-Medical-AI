@@ -6,7 +6,6 @@ from typing import Any
 
 from app.config import Settings
 from app.llm.deepseek import DeepSeekClient
-from app.llm.gigachat import GigaChatClient
 from app.rag.vault import VaultRAG
 from app.rag.web_search import web_search
 from app.services.routing import canned_answer, classify_intent, is_nonclinical
@@ -104,7 +103,8 @@ class AskService:
     def __init__(self, settings: Settings, rag: VaultRAG):
         self.settings = settings
         self.rag = rag
-        self.gigachat = GigaChatClient(settings)
+        # В личном режиме оба клинических контура используют DeepSeek.
+        # GigaChat сохранён в проекте только как отключённая заглушка для будущей интеграции.
         self.deepseek = DeepSeekClient(settings)
 
     async def ask(
@@ -222,7 +222,7 @@ class AskService:
         rf = None
         intl = None
         if mode in ("rf", "both"):
-            rf = await self.gigachat.complete(RF_SYSTEM, user_blob)
+            rf = await self.deepseek.complete(RF_SYSTEM, user_blob)
             rf = self._sanitize_model_names(rf)
         if mode in ("intl", "both"):
             intl = await self.deepseek.complete(INTL_SYSTEM, user_blob)
