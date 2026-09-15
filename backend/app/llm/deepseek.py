@@ -22,7 +22,7 @@ class DeepSeekClient:
             return {
                 "provider": "deepseek",
                 "mode": "mock",
-                "content": self._mock(user),
+                "content": self._mock(system, user),
             }
 
         url = self.settings.deepseek_base_url.rstrip("/") + "/chat/completions"
@@ -48,7 +48,17 @@ class DeepSeekClient:
         return {"provider": "deepseek", "mode": "live", "content": content, "raw": data}
 
     @staticmethod
-    def _mock(user: str) -> str:
+    def _mock(system: str, user: str) -> str:
+        if "российский контур" in system.lower():
+            return (
+                "## Краткий ответ\n\n"
+                "Российский контур работает в демо-режиме и не формирует медицинские рекомендации.\n\n"
+                "## Ограничения\n\n"
+                f"Запрос: «{user[:200]}». Для проверяемого ответа добавьте ключ API и установите LLM_MODE=live.\n\n"
+                "## Источники\n\n"
+                "Источники не загружены: демо-режим.\n\n"
+                "Информация носит справочный характер. Решение принимает лечащий врач."
+            )
         return (
             "## Международные протоколы (демо-режим)\n\n"
             f"Запрос: «{user[:200]}»\n\n"
