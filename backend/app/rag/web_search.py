@@ -24,9 +24,14 @@ async def web_search(
     all_hits: list[dict[str, Any]] = []
     seen: set[str] = set()
     focus = _extract_focus(query)
+    en_focus = (
+        await _resolve_english_focus(focus)
+        if scope in ("intl", "both")
+        else _english_variant(focus)
+    )
 
     if scope in ("intl", "both"):
-        for batch, lang, kind in await _literature_bundle(query, max_results):
+        for batch, lang, kind in await _literature_bundle(query, max_results, en_focus):
             _merge(all_hits, seen, batch, lang, kind)
 
     queries = _build_queries(
@@ -34,6 +39,7 @@ async def web_search(
         bilingual=bilingual,
         freshness_extra=freshness_extra,
         scope=scope,
+        en_focus=en_focus,
     )
     semaphore = asyncio.Semaphore(3)
 
@@ -85,11 +91,12 @@ def _build_queries(
     bilingual: bool,
     freshness_extra: bool,
     scope: str = "both",
+    en_focus: str | None = None,
 ) -> list[tuple[str, str, str]]:
     year = datetime.now().year
     prev = year - 1
     focus = _extract_focus(query)
-    en_focus = _english_variant(focus)
+    en_focus = en_focus or _english_variant(focus)
     intent_ru, intent_en = _detect_intent(query)
     out: list[tuple[str, str, str]] = []
 
@@ -238,9 +245,45 @@ def _english_variant(query: str) -> str:
             matched.append(en)
     codes = re.findall(r"\b[A-Z]\d{2}(?:\.\d+)?\b", query or "", flags=re.I)
     if matched:
-        return " ".join(matched + codes)
+        specific = [
+            term for term in matched
+            if not any(term != other and term.lower() in other.lower() for other in matched)
+        ]
+        return " ".join(specific + codes)
     latin = re.findall(r"[A-Za-z][A-Za-z0-9-]{2,}", query or "")
     return " ".join(latin + codes) or _extract_focus(query)
+
+
+async def _resolve_english_focus(focus: str) -> str:
+    """Use curated terminology first; Wikipedia only translates a search concept."""
+    mapped = _english_variant(focus)
+    if mapped != focus and not re.search(r"[А-Яа-яЁё]", mapped):
+        return mapped
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.get(
+                "https://ru.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "generator": "search",
+                    "gsrsearch": focus,
+                    "gsrlimit": 1,
+                    "prop": "langlinks",
+                    "lllang": "en",
+                    "lllimit": 1,
+                    "format": "json",
+                },
+                headers={"User-Agent": "Vitalis/1.0"},
+            )
+            response.raise_for_status()
+            pages = response.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                links = page.get("langlinks") or []
+                if links and links[0].get("*"):
+                    return str(links[0]["*"])
+    except Exception:
+        pass
+    return mapped
 
 def _search_variants(query: str) -> list[str]:
     q = (query or "").strip()
@@ -271,9 +314,9 @@ def _search_variants(query: str) -> list[str]:
 
 
 async def _literature_bundle(
-    query: str, max_results: int
+    query: str, max_results: int, en_focus: str | None = None
 ) -> list[tuple[list[dict[str, Any]], str, str]]:
-    focus = _english_variant(_extract_focus(query))
+    focus = en_focus or _english_variant(_extract_focus(query))
     _, intent_en = _detect_intent(query)
     current_year = datetime.now().year
     pubmed_query = (
