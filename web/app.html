@@ -332,7 +332,9 @@ async function ask(){
   if(question.length < 3){ err.textContent = 'Введите вопрос'; return; }
   const btn = document.getElementById('askBtn');
   btn.disabled = true;
-  const selectedMode = document.getElementById('mode').value;\n  const contourLabel = selectedMode === 'rf' ? 'РФ' : selectedMode === 'intl' ? 'международный' : 'РФ + международный';\n  status.innerHTML = `Идёт запрос: <b>база → веб (${contourLabel}) → проверка</b>…`;
+  const selectedMode = document.getElementById('mode').value;
+  const contourLabel = selectedMode === 'rf' ? 'РФ' : selectedMode === 'intl' ? 'международный' : 'РФ + международный';
+  status.innerHTML = `Идёт запрос: <b>база → веб (${contourLabel}) → проверка</b>…`;
   try{
     const r = await fetch(API + '/ask', {
       method:'POST',
