@@ -16,12 +16,12 @@ ask_service = AskService(settings, rag)
 app = FastAPI(
     title="Vitalis AI API",
     version="1.0.0",
-    description="RAG + веб-поиск + GigaChat (РФ) + DeepSeek (международное)",
+    description="RAG + веб-поиск + DeepSeek для российского и международного контуров; GigaChat — резервная заглушка",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.origins + ["*"],
+    allow_origins=settings.origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
