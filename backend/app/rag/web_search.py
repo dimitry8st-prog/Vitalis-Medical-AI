@@ -30,9 +30,11 @@ async def web_search(
         else _english_variant(focus)
     )
 
-    if scope in ("intl", "both"):
-        for batch, lang, kind in await _literature_bundle(query, max_results, en_focus):
-            _merge(all_hits, seen, batch, lang, kind)
+    literature_task = (
+        asyncio.create_task(_literature_bundle(query, max_results, en_focus))
+        if scope in ("intl", "both")
+        else None
+    )
 
     queries = _build_queries(
         query,
@@ -41,7 +43,7 @@ async def web_search(
         scope=scope,
         en_focus=en_focus,
     )
-    semaphore = asyncio.Semaphore(3)
+    semaphore = asyncio.Semaphore(5)
 
     async def run_one(item: tuple[str, str, str]) -> tuple[list[dict[str, Any]], str, str]:
         q, lang, kind = item
@@ -58,6 +60,10 @@ async def web_search(
     batches = await asyncio.gather(*(run_one(item) for item in queries))
     for batch, lang, kind in batches:
         _merge(all_hits, seen, batch, lang, kind)
+
+    if literature_task is not None:
+        for batch, lang, kind in await literature_task:
+            _merge(all_hits, seen, batch, lang, kind)
 
     for item in all_hits:
         item["relevance_score"] = _score_hit(item, focus)
