@@ -96,7 +96,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 <main>
   <section class="panel left">
     <h1>Клинический запрос</h1>
-    <p class="sub">Система Vitalis: сначала база знаний, затем обязательный веб-поиск RU+EN. Приоритет — актуальные рекомендации.</p>
+    <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
     <div class="controls">
       <select id="mode">
         <option value="both">РФ + международные</option>
@@ -105,7 +105,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       </select>
       <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
     </div>
-    <p class="hint">STRICT: источники старше 5 лет — устаревшие. Веб (2023–2026) важнее локальной базы.</p>
+    <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
     <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
     <div class="row">
       <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
@@ -332,7 +332,7 @@ async function ask(){
   if(question.length < 3){ err.textContent = 'Введите вопрос'; return; }
   const btn = document.getElementById('askBtn');
   btn.disabled = true;
-  status.innerHTML = 'Идёт запрос: <b>база → веб RU/EN → актуализация</b>…';
+  const selectedMode = document.getElementById('mode').value;\n  const contourLabel = selectedMode === 'rf' ? 'РФ' : selectedMode === 'intl' ? 'международный' : 'РФ + международный';\n  status.innerHTML = `Идёт запрос: <b>база → веб (${contourLabel}) → проверка</b>…`;
   try{
     const r = await fetch(API + '/ask', {
       method:'POST',
