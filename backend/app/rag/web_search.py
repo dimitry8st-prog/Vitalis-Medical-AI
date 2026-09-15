@@ -21,21 +21,27 @@ async def web_search(
     all_hits: list[dict[str, Any]] = []
     seen: set[str] = set()
 
+    # Международный контур: PubMed по английскому варианту запроса.
     for batch, lang in await _fallback_bundle(query, max_results):
-        _merge(all_hits, seen, batch, lang, "fallback")
+        _merge(all_hits, seen, batch, lang, "pubmed")
 
-    # DDG часто rate-limit; не тратим время, если уже есть источники
-    if len(all_hits) < 2:
-        queries = _build_queries(query, bilingual=bilingual, freshness_extra=False)
-        for q, lang, kind in queries[:1]:
-            try:
-                batch = await asyncio.wait_for(
-                    _run_provider(provider, q, settings, max_results),
-                    timeout=4.0,
-                )
-            except Exception:
-                batch = []
-            _merge(all_hits, seen, batch, lang, kind)
+    # RU и EN выполняются независимо: наличие одного языка не отменяет второй.
+    queries = _build_queries(query, bilingual=bilingual, freshness_extra=freshness_extra)
+
+    async def run_one(item: tuple[str, str, str]) -> tuple[list[dict[str, Any]], str, str]:
+        q, lang, kind = item
+        try:
+            batch = await asyncio.wait_for(
+                _run_provider(provider, q, settings, max_results),
+                timeout=6.0,
+            )
+        except Exception:
+            batch = []
+        return batch, lang, kind
+
+    batches = await asyncio.gather(*(run_one(item) for item in queries))
+    for batch, lang, kind in batches:
+        _merge(all_hits, seen, batch, lang, kind)
 
     all_hits.sort(key=lambda x: (x.get("year") or 0), reverse=True)
     return all_hits[: max(max_results * 3, 6)]
@@ -71,7 +77,8 @@ def _build_queries(
     year = __import__("datetime").datetime.now().year
     prev = year - 1
     ru = f"{query} клинические рекомендации Минздрав"
-    en = f"{query} clinical guidelines PubMed"
+    en_query = _english_variant(query)
+    en = f"{en_query} clinical guidelines"
     out: list[tuple[str, str, str]] = [(ru, "ru", "base")]
     if bilingual:
         out.append((en, "en", "base"))
@@ -113,7 +120,18 @@ _RU_EN_TERMS = {
     "позвоночник": "spine fracture",
     "онкология": "oncology cancer",
     "инсульт": "stroke",
+    "чмт": "traumatic brain injury",
+    "черепно-мозгов": "traumatic brain injury",
+    "черепно мозгов": "traumatic brain injury",
 }
+
+
+def _english_variant(query: str) -> str:
+    low = (query or "").lower()
+    for ru, en in _RU_EN_TERMS.items():
+        if ru.strip() in low:
+            return en
+    return query
 
 
 def _search_variants(query: str) -> list[str]:
