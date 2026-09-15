@@ -49,9 +49,10 @@ STRICT_FRESHNESS = """
 1. Документ >5 лет = устаревший; предпочитай веб 2023–2026.
 2. Веб > RAG при противоречии.
 3. Указывай год источника. Не омолаживай даты.
-4. Используй только источники, переданные в контексте. Не дополняй ответ сведениями из памяти модели.
-5. Если обязательные актуальные веб-источники не найдены, медицинский ответ не формируй.
-   Сообщи, что доказательств недостаточно, и предложи уточнить запрос или повторить поиск позже.
+4. В первую очередь используй источники, переданные в контексте.
+5. Если веб-поиск не вернул источники, явно пометь ответ как справочный обзор без веб-проверки.
+   В этом режиме не выдумывай ссылки и документы, не выдавай индивидуальные назначения
+   и не указывай точные дозировки, если они не подтверждены контекстом.
 6. Не выдумывай названия документов, рекомендации, дозировки, ссылки и даты.
 """
 
@@ -210,7 +211,7 @@ class AskService:
             web_error = f"{type(e).__name__}: {e}"
 
         missing_web = self._missing_required_web(mode, web_hits)
-        if missing_web:
+        if missing_web and self.settings.evidence_gate_mode == "strict":
             return self._evidence_blocked_response(
                 question=question,
                 mode=mode,
@@ -224,6 +225,16 @@ class AskService:
             )
 
         context = self._format_context(relevant_rag, rag_hits, web_hits, has_stale)
+        if missing_web:
+            missing_label = "+".join(code.upper() for code in missing_web)
+            context += (
+                "\n\n# ОГРАНИЧЕННЫЙ РЕЖИМ ИСТОЧНИКОВ\n"
+                f"Веб-поиск не вернул обязательные источники: {missing_label}. "
+                "Начни ответ с предупреждения: «Веб-проверка источников сейчас недоступна; "
+                "ниже приведён общий справочный обзор, требующий проверки по действующим "
+                "клиническим рекомендациям». Не выдумывай ссылки, названия документов и даты. "
+                "Не давай индивидуальных назначений и неподтверждённых точных дозировок."
+            )
         # Подмешиваем FAQ-контекст только если релевантен onboarding
         faq_hits = [h for h in rag_hits if "faq" in (h.get("path") or "").lower()]
         if faq_hits:
@@ -362,6 +373,9 @@ class AskService:
                 "missing_web_languages": missing_web,
                 "use_web_requested": use_web,
                 "web_error": web_error,
+                "evidence_status": "limited" if missing_web else "verified_web",
+                "missing_web_languages": missing_web,
+                "evidence_gate_mode": self.settings.evidence_gate_mode,
             },
             "disclaimer": DISCLAIMER,
         }
