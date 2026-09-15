@@ -206,6 +206,21 @@ _RU_EN_TERMS = {
     "чмт": "traumatic brain injury",
 }
 
+
+_RU_EN_PATTERNS = (
+    (r"ишемическ\w*\s+инсульт\w*", "ischemic stroke"),
+    (r"геморрагическ\w*\s+инсульт\w*", "hemorrhagic stroke"),
+    (r"черепно[- ]мозгов\w*\s+травм\w*", "traumatic brain injury"),
+    (r"рассеянн\w*\s+склероз\w*", "multiple sclerosis"),
+    (r"болезн\w*\s+паркинсон\w*", "Parkinson disease"),
+    (r"болезн\w*\s+альцгеймер\w*", "Alzheimer disease"),
+    (r"сердечн\w*\s+недостаточност\w*", "heart failure"),
+    (r"фибрилляц\w*\s+предсерди\w*", "atrial fibrillation"),
+    (r"хроническ\w*\s+болезн\w*\s+почек", "chronic kidney disease"),
+    (r"рак\w*\s+молочн\w*\s+желез\w*", "breast cancer"),
+    (r"рак\w*\s+предстательн\w*\s+желез\w*", "prostate cancer"),
+)
+
 _INTENT_TERMS = (
     (r"леч|терап|препарат|дозиров", "лечение", "treatment"),
     (r"диагност|обследован|скрининг", "диагностика", "diagnosis"),
@@ -245,7 +260,9 @@ def _extract_focus(query: str) -> str:
 
 def _english_variant(query: str) -> str:
     low = (query or "").lower()
-    matched: list[str] = []
+    matched: list[str] = [
+        en for pattern, en in _RU_EN_PATTERNS if re.search(pattern, low)
+    ]
     for ru, en in sorted(_RU_EN_TERMS.items(), key=lambda pair: len(pair[0]), reverse=True):
         if ru in low and en not in matched:
             matched.append(en)
