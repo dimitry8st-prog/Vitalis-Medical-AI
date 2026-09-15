@@ -201,7 +201,7 @@ _RU_EN_TERMS = {
 }
 
 _INTENT_TERMS = (
-    (r"лечен|терап|препарат|дозиров", "лечение", "treatment"),
+    (r"леч|терап|препарат|дозиров", "лечение", "treatment"),
     (r"диагност|обследован|скрининг", "диагностика", "diagnosis"),
     (r"реабилитац|восстанов", "реабилитация", "rehabilitation"),
     (r"профилактик|предотвращ", "профилактика", "prevention"),
@@ -359,9 +359,9 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
     authority = 0
     tiers = (
         (5, ("cr.minzdrav.gov.ru", "minzdrav.gov.ru", "who.int", "nice.org.uk")),
-        (4, ("nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov", "europepmc.org", "cochranelibrary.com")),
+        (4, ("nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov", "europepmc.org", "cochranelibrary.com", "nejm.org", "thelancet.com", "jamanetwork.com", "bmj.com", "nature.com")),
         (3, ("escardio.org", "heart.org", "acc.org", "idsociety.org", "nccn.org", "eular.org", "ersnet.org")),
-        (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "oncology.ru", "mediasphera.ru", "rnmot.ru")),
+        (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "oncology.ru", "almazovcentre.ru", "gnicpm.ru", "mediasphera.ru", "rnmot.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru")),
     )
     for points, domains in tiers:
         if any(domain in url for domain in domains):
@@ -448,7 +448,11 @@ async def _bing_rss(query: str, max_results: int) -> list[dict[str, Any]]:
         ) as client:
             response = await client.get(
                 "https://www.bing.com/search",
-                params={"q": query, "format": "rss", "setlang": "ru"},
+                params={
+                    "q": query,
+                    "format": "rss",
+                    "setlang": "ru" if re.search(r"[А-Яа-яЁё]", query) else "en",
+                },
             )
             response.raise_for_status()
             root = ET.fromstring(response.text)
