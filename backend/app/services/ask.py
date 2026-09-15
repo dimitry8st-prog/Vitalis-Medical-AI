@@ -49,9 +49,10 @@ STRICT_FRESHNESS = """
 1. Документ >5 лет = устаревший; предпочитай веб 2023–2026.
 2. Веб > RAG при противоречии.
 3. Указывай год источника. Не омолаживай даты.
-4. Если live-поиск пуст/скудный — НЕ оставляй пустые разделы.
-   Дай полный содержательный клинический обзор по стандартной РФ-практике
-   и в начале напиши: «Live-источники ограничены; ниже обзор по типовым клинрек РФ — перепроверьте актуальную версию на сайте Минздрава / рубрикаторе».
+4. Используй только источники, переданные в контексте. Не дополняй ответ сведениями из памяти модели.
+5. Если обязательные актуальные веб-источники не найдены, медицинский ответ не формируй.
+   Сообщи, что доказательств недостаточно, и предложи уточнить запрос или повторить поиск позже.
+6. Не выдумывай названия документов, рекомендации, дозировки, ссылки и даты.
 """
 
 RF_SYSTEM = f"""Ты — Система Vitalis (контур РФ-рекомендаций).
@@ -208,6 +209,20 @@ class AskService:
             web_hits = []
             web_error = f"{type(e).__name__}: {e}"
 
+        missing_web = self._missing_required_web(mode, web_hits)
+        if missing_web:
+            return self._evidence_blocked_response(
+                question=question,
+                mode=mode,
+                mkb=mkb,
+                intent=intent,
+                rag_hits=relevant_rag,
+                web_hits=web_hits,
+                web_error=web_error,
+                missing_web=missing_web,
+                use_web=use_web,
+            )
+
         context = self._format_context(relevant_rag, rag_hits, web_hits, has_stale)
         # Подмешиваем FAQ-контекст только если релевантен onboarding
         faq_hits = [h for h in rag_hits if "faq" in (h.get("path") or "").lower()]
@@ -250,6 +265,101 @@ class AskService:
                 "web_forced": True,
                 "freshness_extra": True,
                 "stale_years": STALE_YEARS,
+                "use_web_requested": use_web,
+                "web_error": web_error,
+            },
+            "disclaimer": DISCLAIMER,
+        }
+
+    @staticmethod
+    def _missing_required_web(mode: str, web_hits: list[dict[str, Any]]) -> list[str]:
+        available = {
+            str(hit.get("lang") or "").lower()
+            for hit in web_hits
+            if hit.get("provider") != "error" and (hit.get("url") or hit.get("title"))
+        }
+        required = {"ru", "en"} if mode == "both" else {mode}
+        # Названия режимов отличаются от языковых кодов.
+        if "rf" in required:
+            required.remove("rf")
+            required.add("ru")
+        if "intl" in required:
+            required.remove("intl")
+            required.add("en")
+        return sorted(required - available)
+
+    def _evidence_blocked_response(
+        self,
+        *,
+        question: str,
+        mode: str,
+        mkb: str | None,
+        intent: str,
+        rag_hits: list[dict[str, Any]],
+        web_hits: list[dict[str, Any]],
+        web_error: str | None,
+        missing_web: list[str],
+        use_web: bool,
+    ) -> dict[str, Any]:
+        names = {"ru": "российские", "en": "международные"}
+        missing_label = " и ".join(names.get(code, code) for code in missing_web)
+        message = (
+            f"Актуальные подтверждённые {missing_label} веб-источники не найдены. "
+            "Медицинский ответ не сформирован, чтобы избежать недостоверных рекомендаций. "
+            "Уточните запрос или повторите поиск позже."
+        )
+        payload = {"provider": "vitalis", "mode": "evidence_blocked", "content": message}
+
+        def sources_for(lang: str) -> list[dict[str, Any]]:
+            return [
+                {
+                    "type": "web",
+                    "group": "rf" if lang == "ru" else "intl",
+                    "title": hit.get("title", ""),
+                    "ref": hit.get("url", ""),
+                    "lang": lang,
+                    "year": hit.get("year"),
+                    "stale": False,
+                }
+                for hit in web_hits
+                if hit.get("lang") == lang and (hit.get("title") or hit.get("url"))
+            ]
+
+        tab = lambda label, lang: {
+            "label": label,
+            "content": message,
+            "sections": [{"key": "w", "title": "Источников недостаточно", "body": message}],
+            "sources": sources_for(lang),
+        }
+        card = {
+            "mkb": mkb or "—",
+            "title": "Ответ не сформирован: недостаточно источников",
+            "identity": "Система Vitalis",
+            "intent": intent,
+            "tabs": {
+                "rf": tab("РФ · рекомендации", "ru"),
+                "intl": tab("Международные · рекомендации", "en"),
+            },
+        }
+        return {
+            "question": question,
+            "mode": mode,
+            "llm_mode": self.settings.llm_mode,
+            "card": card,
+            "rf": payload if mode in ("rf", "both") else None,
+            "intl": payload if mode in ("intl", "both") else None,
+            "rag": rag_hits,
+            "web": web_hits,
+            "search": {
+                "intent": intent,
+                "routed": "evidence_blocked",
+                "rag_total": len(rag_hits),
+                "rag_relevant": len(rag_hits),
+                "rag_stale": sum(1 for hit in rag_hits if hit.get("stale")),
+                "web_total": len(web_hits),
+                "web_forced": True,
+                "web_required": True,
+                "missing_web_languages": missing_web,
                 "use_web_requested": use_web,
                 "web_error": web_error,
             },

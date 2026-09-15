@@ -327,7 +327,12 @@ async function ask(){
     if(!r.ok) throw new Error(data.detail || data.error || 'Ошибка API');
     render(data);
     const s = data.search || {};
-    status.innerHTML = `Готово · Система Vitalis · RAG ${s.rag_relevant ?? data.rag.length}/${s.rag_total ?? data.rag.length} (устар. ${s.rag_stale ?? 0}) · web ${s.web_total ?? data.web.length}`;
+    if(s.routed === 'evidence_blocked'){
+      const missing = (s.missing_web_languages || []).join('+').toUpperCase();
+      status.innerHTML = `Ответ заблокирован · нет обязательных источников ${escapeHtml(missing)} · web ${s.web_total ?? 0}`;
+    } else {
+      status.innerHTML = `Готово · Система Vitalis · RAG ${s.rag_relevant ?? data.rag.length}/${s.rag_total ?? data.rag.length} (устар. ${s.rag_stale ?? 0}) · web ${s.web_total ?? data.web.length}`;
+    }
     if(typeof ym === 'function' && window.__YM_ID__){ try{ ym(window.__YM_ID__, 'reachGoal', 'ask_success'); }catch(e){} }
   }catch(e){
     err.textContent = e.message || String(e);
