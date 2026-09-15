@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
 
     llm_mode: Literal["mock", "live"] = "mock"
+    # warn: отвечать с предупреждением при сбое веб-поиска; strict: блокировать ответ.
+    evidence_gate_mode: Literal["warn", "strict"] = "warn"
 
     @property
     def origins(self) -> list[str]:
