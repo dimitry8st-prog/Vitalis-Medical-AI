@@ -22,6 +22,7 @@ class AskResponse(BaseModel):
     rag: list[dict[str, Any]] = []
     web: list[dict[str, Any]] = []
     search: dict[str, Any] | None = None
+    learning: dict[str, Any] | None = None
     disclaimer: str = "Информация носит справочный характер. Решение принимает лечащий врач."
 
 
