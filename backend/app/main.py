@@ -36,6 +36,7 @@ def health() -> HealthResponse:
         llm_mode=settings.llm_mode,
         gigachat=settings.gigachat_ready,
         deepseek=settings.deepseek_ready,
+        keys_ready=settings.deepseek_ready,
         vault_chunks=len(rag.chunks),
         web_search=settings.web_search_provider,
     )
