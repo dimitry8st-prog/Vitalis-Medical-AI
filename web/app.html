@@ -156,7 +156,7 @@ function applyModeUi(d){
   liveBtn.classList.toggle('active', d.llm_mode === 'live');
   liveBtn.disabled = !d.keys_ready && d.llm_mode !== 'live';
   liveBtn.title = d.keys_ready
-    ? 'Живые модели (GigaChat / DeepSeek)'
+    ? 'DeepSeek: РФ и международный контуры'
     : 'Нужны ключи API в .env';
 }
 
