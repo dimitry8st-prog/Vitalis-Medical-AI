@@ -37,5 +37,6 @@ class HealthResponse(BaseModel):
     llm_mode: str
     gigachat: bool
     deepseek: bool
+    keys_ready: bool
     vault_chunks: int
     web_search: str
