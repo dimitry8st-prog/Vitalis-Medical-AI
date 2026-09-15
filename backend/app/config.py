@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     faiss_index_path: str = ""
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Резервная интеграция: по умолчанию отключена и не участвует в маршрутизации.
+    gigachat_enabled: bool = False
     gigachat_client_id: str = ""
     gigachat_client_secret: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
@@ -64,7 +66,7 @@ class Settings(BaseSettings):
     @property
     def gigachat_ready(self) -> bool:
         # Сбер: либо Client ID + Secret, либо один Authorization Key в CLIENT_SECRET
-        return bool(self.gigachat_client_secret.strip())
+        return self.gigachat_enabled and bool(self.gigachat_client_secret.strip())
 
     @property
     def deepseek_ready(self) -> bool:
