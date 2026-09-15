@@ -330,6 +330,9 @@ async function ask(){
     if(s.routed === 'evidence_blocked'){
       const missing = (s.missing_web_languages || []).join('+').toUpperCase();
       status.innerHTML = `Ответ заблокирован · нет обязательных источников ${escapeHtml(missing)} · web ${s.web_total ?? 0}`;
+    } else if(s.evidence_status === 'limited'){
+      const missing = (s.missing_web_languages || []).join('+').toUpperCase();
+      status.innerHTML = `Готово с предупреждением · веб-источники ${escapeHtml(missing)} недоступны · RAG ${s.rag_relevant ?? data.rag.length} · web ${s.web_total ?? 0}`;
     } else {
       status.innerHTML = `Готово · Система Vitalis · RAG ${s.rag_relevant ?? data.rag.length}/${s.rag_total ?? data.rag.length} (устар. ${s.rag_stale ?? 0}) · web ${s.web_total ?? data.web.length}`;
     }
