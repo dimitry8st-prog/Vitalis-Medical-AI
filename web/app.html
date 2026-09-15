@@ -70,6 +70,9 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .src h5{font-family:var(--mn);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-bottom:8px}
 .src a,.src div{display:block;font-size:12.5px;padding:8px 10px;border-radius:8px;background:var(--ice);border:1px solid var(--line);margin-bottom:6px;color:var(--navy)}
 .stale{color:#B45309;font-size:11px;margin-left:6px}
+.learning{margin-top:16px;padding:14px 16px;border-radius:12px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.28);font-size:13px;line-height:1.45}
+.learning h5{font-family:var(--mn);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px;color:var(--mint)}
+.learning a{display:block;color:#0369a1;margin-top:6px;overflow-wrap:anywhere}
 .disc{margin-top:16px;font-size:14px;font-weight:600;color:var(--navy);padding:14px 16px;border-radius:12px;background:rgba(245,158,11,.12);border:1.5px solid rgba(245,158,11,.35);line-height:1.45}
 .empty{color:var(--slate);font-size:14px;padding:40px 10px;text-align:center}
 .meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
@@ -94,7 +97,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 <main>
   <section class="panel left">
     <h1>Клинический запрос</h1>
-    <p class="sub">Система Vitalis: сначала база знаний, затем обязательный веб-поиск RU+EN. Приоритет — актуальные рекомендации.</p>
+    <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
     <div class="controls">
       <select id="mode">
         <option value="both">РФ + международные</option>
@@ -103,7 +106,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       </select>
       <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
     </div>
-    <p class="hint">STRICT: источники старше 5 лет — устаревшие. Веб (2023–2026) важнее локальной базы.</p>
+    <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
     <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
     <div class="row">
       <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
@@ -135,6 +138,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
           <div id="intlSections"></div>
           <div class="src" id="intlSrc"></div>
         </div>
+        <div class="learning" id="learning" style="display:none"></div>
         <div class="disc" id="disc"></div>
       </div>
     </div>
@@ -271,6 +275,23 @@ function renderSources(containerId, sources, label){
   });
 }
 
+function renderLearning(learning){
+  const el = document.getElementById('learning');
+  const candidates = learning && learning.candidates ? learning.candidates : [];
+  if(!candidates.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML='<h5>Новые источники для рассмотрения</h5>';
+  const note=document.createElement('div');
+  note.textContent='Это кандидаты, а не утверждённая база. Добавление в RAG и Obsidian — только после проверки владельцем.';
+  el.appendChild(note);
+  candidates.forEach(c=>{
+    const a=document.createElement('a');
+    a.href=c.url; a.target='_blank'; a.rel='noopener';
+    a.textContent=(c.title||c.url)+' · needs_review';
+    el.appendChild(a);
+  });
+}
+
 function render(data){
   document.getElementById('empty').style.display='none';
   document.getElementById('card').style.display='block';
@@ -292,6 +313,8 @@ function render(data){
   renderSources('rfSrc', c.tabs.rf && c.tabs.rf.sources, 'Источники · РФ');
   renderSources('intlSrc', c.tabs.intl && c.tabs.intl.sources, 'Источники · международные');
 
+  renderLearning(data.learning);
+
   const disc = data.disclaimer || '';
   const discEl = document.getElementById('disc');
   if(disc){ discEl.style.display='block'; discEl.textContent = disc; }
@@ -311,7 +334,9 @@ async function ask(){
   if(question.length < 3){ err.textContent = 'Введите вопрос'; return; }
   const btn = document.getElementById('askBtn');
   btn.disabled = true;
-  status.innerHTML = 'Идёт запрос: <b>база → веб RU/EN → актуализация</b>…';
+  const selectedMode = document.getElementById('mode').value;
+  const contourLabel = selectedMode === 'rf' ? 'РФ' : selectedMode === 'intl' ? 'международный' : 'РФ + международный';
+  status.innerHTML = `Идёт запрос: <b>база → веб (${contourLabel}) → проверка</b>…`;
   try{
     const r = await fetch(API + '/ask', {
       method:'POST',
@@ -330,6 +355,9 @@ async function ask(){
     if(s.routed === 'evidence_blocked'){
       const missing = (s.missing_web_languages || []).join('+').toUpperCase();
       status.innerHTML = `Ответ заблокирован · нет обязательных источников ${escapeHtml(missing)} · web ${s.web_total ?? 0}`;
+    } else if(s.evidence_status === 'limited'){
+      const missing = (s.missing_web_languages || []).join('+').toUpperCase();
+      status.innerHTML = `Готово с предупреждением · веб-источники ${escapeHtml(missing)} недоступны · RAG ${s.rag_relevant ?? data.rag.length} · web ${s.web_total ?? 0}`;
     } else {
       status.innerHTML = `Готово · Система Vitalis · RAG ${s.rag_relevant ?? data.rag.length}/${s.rag_total ?? data.rag.length} (устар. ${s.rag_stale ?? 0}) · web ${s.web_total ?? data.web.length}`;
     }
