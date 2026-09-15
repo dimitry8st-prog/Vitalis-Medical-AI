@@ -66,7 +66,7 @@ async def web_search(
             _merge(all_hits, seen, batch, lang, kind)
 
     for item in all_hits:
-        item["relevance_score"] = _score_hit(item, focus)
+        item["relevance_score"] = _score_hit(item, f"{focus} {en_focus}")
     return _balanced_results(all_hits, scope, max_results)
 
 
