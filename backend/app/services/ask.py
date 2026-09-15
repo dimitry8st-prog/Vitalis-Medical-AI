@@ -225,8 +225,9 @@ class AskService:
                 question,
                 self.settings,
                 max_results=4,
-                bilingual=True,
+                bilingual=mode in ("intl", "both"),
                 freshness_extra=True,
+                scope=mode,
             )
         except Exception as e:
             web_hits = []
