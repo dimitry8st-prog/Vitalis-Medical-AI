@@ -1,0 +1,14 @@
+# Template for Caddy 2.6.2. Replace the placeholder locally before validating.
+# Append this site to the existing Caddyfile; preserve other site blocks.
+# Never commit the real bcrypt hash.
+vitalis.st8dom.ru {
+    route {
+        basicauth {
+            dmitry REPLACE_WITH_LOCAL_BCRYPT_HASH
+        }
+        respond /api/ai/rag/rebuild* "Forbidden" 403
+        reverse_proxy 127.0.0.1:3080 {
+            header_up -Authorization
+        }
+    }
+}

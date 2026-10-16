@@ -1,0 +1,7 @@
+# Copy to compose.override.yaml on the VPS after creating the private env file.
+services:
+  python:
+    env_file:
+      - /root/.config/vitalis-ru/python.env
+    environment:
+      LLM_MODE: live

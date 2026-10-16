@@ -1,0 +1,44 @@
+name: vitalis-ru
+services:
+  python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      LLM_MODE: mock
+      GIGACHAT_ENABLED: "false"
+      VAULT_PATH: /app/vault
+      FAISS_INDEX_PATH: /data/faiss
+    volumes:
+      - rag_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      PYTHON_API_URL: http://python:8000
+    ports:
+      - "127.0.0.1:3080:3000"
+    volumes:
+      - leads_data:/app/server/data
+    depends_on:
+      - python
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+volumes:
+  rag_data:
+  leads_data:
