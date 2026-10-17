@@ -9,6 +9,9 @@ from app.rag.web_search import (
     _extract_focus,
     _rf_search_focus,
 )
+from app.rag.source_policy import classify_international_source
+from app.rag.document_fetch import select_relevant_excerpt
+from app.services.ask import AskService
 
 
 class ClinicalSearchPlanTests(unittest.TestCase):
@@ -86,9 +89,59 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         )
         self.assertTrue(queries)
         self.assertTrue(all(lang == "en" for _, lang, _ in queries))
-        self.assertTrue(any("WHO NICE" in q for q, _, _ in queries))
+        self.assertTrue(any("site:who.int" in q for q, _, _ in queries))
+        self.assertTrue(any("site:nice.org.uk" in q for q, _, _ in queries))
         self.assertTrue(any("NIH CDC" in q for q, _, _ in queries))
-        self.assertTrue(any("systematic review" in q for q, _, _ in queries))
+        self.assertTrue(any("Cochrane" in q for q, _, _ in queries))
+
+    def test_drug_question_adds_regulatory_sources(self) -> None:
+        queries = _build_queries(
+            "Дозировка цитиколина после ишемического инсульта",
+            bilingual=True,
+            freshness_extra=False,
+            scope="intl",
+            en_focus="citicoline ischemic stroke",
+        )
+        self.assertTrue(any("fda.gov" in q or "dailymed" in q for q, _, _ in queries))
+        self.assertTrue(any("ema.europa.eu" in q or "bnf.nice" in q for q, _, _ in queries))
+
+    def test_international_source_policy_tracks_jurisdiction(self) -> None:
+        eso = classify_international_source("https://eso-stroke.org/guidelines/example")
+        self.assertEqual(eso["source_tier"], "official_guideline")
+        self.assertEqual(eso["jurisdiction"], "EU")
+        self.assertTrue(eso["official_domain"])
+
+    def test_intl_balancer_rejects_unknown_and_russian_domains(self) -> None:
+        hits = [
+            {"url": "https://who.int/guideline", "lang": "en", "query_kind": "intl_who", "relevance_score": 12, "year": 2025},
+            {"url": "https://pubmed.ncbi.nlm.nih.gov/1/", "lang": "en", "query_kind": "pubmed", "relevance_score": 8, "year": 2024},
+            {"url": "https://cr.minzdrav.gov.ru/schema/1", "lang": "en", "query_kind": "intl_guideline", "relevance_score": 50, "year": 2026},
+            {"url": "https://random-blog.example/guideline", "lang": "en", "query_kind": "intl_guideline", "relevance_score": 100, "year": 2026},
+        ]
+        selected = _balanced_results(hits, "intl", 4)
+        urls = {item["url"] for item in selected}
+        self.assertIn("https://who.int/guideline", urls)
+        self.assertIn("https://pubmed.ncbi.nlm.nih.gov/1/", urls)
+        self.assertNotIn("https://cr.minzdrav.gov.ru/schema/1", urls)
+        self.assertNotIn("https://random-blog.example/guideline", urls)
+
+    def test_local_russian_protocol_does_not_enter_intl_context(self) -> None:
+        hits = [
+            {"title": "РФ", "meta": {"source": "Минздрав РФ"}},
+            {"title": "INT", "meta": {"source": "WHO", "jurisdiction": "international"}},
+        ]
+        self.assertEqual([h["title"] for h in AskService._scope_rag_hits(hits, "ru")], ["РФ"])
+        self.assertEqual([h["title"] for h in AskService._scope_rag_hits(hits, "en")], ["INT"])
+
+    def test_full_text_excerpt_prefers_clinically_relevant_passage(self) -> None:
+        text = (
+            "Navigation and cookie policy. "
+            "Stroke rehabilitation should include task-specific repetitive practice. "
+            "The guideline recommends multidisciplinary assessment after ischemic stroke."
+        )
+        excerpt = select_relevant_excerpt(text, "ischemic stroke rehabilitation")
+        self.assertIn("rehabilitation", excerpt.lower())
+        self.assertIn("guideline", excerpt.lower())
 
 
 if __name__ == "__main__":
