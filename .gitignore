@@ -8,6 +8,7 @@ backend/**/__pycache__/
 backend/.venv/
 backend/.venv312/
 .venv/
+.venv-test/
 venv/
 *.pyc
 .DS_Store
