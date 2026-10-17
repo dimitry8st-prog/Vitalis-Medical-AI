@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     web_search_provider: Literal["duckduckgo", "serper", "tavily"] = "duckduckgo"
     serper_api_key: str = ""
     tavily_api_key: str = ""
+    web_fetch_full_text: bool = True
+    web_fetch_max_documents: int = 3
+    web_fetch_max_bytes: int = 8_000_000
 
     llm_mode: Literal["mock", "live"] = "mock"
     # warn: отвечать с предупреждением при сбое веб-поиска; strict: блокировать ответ.
