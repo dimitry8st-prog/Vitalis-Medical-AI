@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     # warn: отвечать с предупреждением при сбое веб-поиска; strict: блокировать ответ.
     evidence_gate_mode: Literal["warn", "strict"] = "warn"
 
+    # Vitalis Documents. Внешний LLM для документов выключен по умолчанию:
+    # включать только после проверки правовой схемы и политики провайдера.
+    document_analysis_enabled: bool = True
+    document_external_llm_enabled: bool = False
+    document_max_file_bytes: int = 8_000_000
+    document_max_pages: int = 40
+    document_max_chars: int = 80_000
+    document_parse_timeout_seconds: int = 20
+    document_session_ttl_seconds: int = 1_800
+    document_max_sessions: int = 32
+    document_require_deidentified_confirmation: bool = True
+
     @property
     def origins(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
@@ -76,6 +88,15 @@ class Settings(BaseSettings):
     @property
     def deepseek_ready(self) -> bool:
         return bool(self.deepseek_api_key)
+
+    @property
+    def document_external_llm_ready(self) -> bool:
+        return (
+            self.document_analysis_enabled
+            and self.document_external_llm_enabled
+            and self.llm_mode == "live"
+            and self.deepseek_ready
+        )
 
 
 @lru_cache

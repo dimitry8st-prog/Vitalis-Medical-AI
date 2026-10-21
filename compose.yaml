@@ -9,6 +9,8 @@ services:
     environment:
       LLM_MODE: mock
       GIGACHAT_ENABLED: "false"
+      DOCUMENT_ANALYSIS_ENABLED: "true"
+      DOCUMENT_EXTERNAL_LLM_ENABLED: "false"
       VAULT_PATH: /app/vault
       FAISS_INDEX_PATH: /data/faiss
     volumes:
