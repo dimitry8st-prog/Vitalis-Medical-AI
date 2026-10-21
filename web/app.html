@@ -77,6 +77,25 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .empty{color:var(--slate);font-size:14px;padding:40px 10px;text-align:center}
 .meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .chip{font-family:var(--mn);font-size:10.5px;padding:4px 8px;border-radius:999px;background:var(--ice);border:1px solid var(--line);color:var(--slate)}
+.hidden{display:none!important}
+.workspace-switch{display:flex;gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.workspace-switch button{flex:1;border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer}
+.workspace-switch button.active{background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(10,22,40,.16)}
+.upload{display:block;border:1.5px dashed rgba(59,130,246,.35);background:var(--ice);border-radius:14px;padding:16px;margin-bottom:12px}
+.upload input{display:block;width:100%;margin-top:10px}
+.consent{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;line-height:1.45;color:var(--slate);margin:12px 0}
+.consent input{margin-top:3px;flex-shrink:0}
+.doc-meta{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+.doc-section{padding:14px;border-radius:12px;border:1px solid var(--line);margin-bottom:12px;background:#fff}
+.doc-section h4{font-size:14px;margin-bottom:8px}
+.doc-section .body{font-size:13.5px;color:var(--slate);white-space:pre-wrap;line-height:1.55}
+.doc-section ul{padding-left:18px}
+.doc-section li{font-size:13.5px;line-height:1.5;margin-bottom:10px}
+.doc-section small{display:block;color:var(--slate);margin-top:3px}
+.doc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.doc-actions .danger{background:#fff;color:var(--coral);border:1px solid rgba(239,68,68,.3)}
+.qa-box{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.qa-box textarea{min-height:78px}
 </style>
 </head>
 <body>
@@ -96,50 +115,106 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 </header>
 <main>
   <section class="panel left">
-    <h1>Клинический запрос</h1>
-    <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
-    <div class="controls">
-      <select id="mode">
-        <option value="both">РФ + международные</option>
-        <option value="rf">Только РФ · рекомендации</option>
-        <option value="intl">Только международные · рекомендации</option>
-      </select>
-      <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
+    <div class="workspace-switch" aria-label="Раздел кабинета">
+      <button type="button" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинический запрос</button>
+      <button type="button" id="workspaceDocument" onclick="setWorkspace('document')">Разбор PDF</button>
     </div>
-    <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
-    <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
-    <div class="row">
-      <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
-      <button class="btn btn-gh" type="button" onclick="fillDemo()">Пример ОКС</button>
+    <div id="clinicalTool">
+      <h1>Клинический запрос</h1>
+      <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
+      <div class="controls">
+        <select id="mode">
+          <option value="both">РФ + международные</option>
+          <option value="rf">Только РФ · рекомендации</option>
+          <option value="intl">Только международные · рекомендации</option>
+        </select>
+        <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
+      </div>
+      <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
+      <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
+      <div class="row">
+        <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
+        <button class="btn btn-gh" type="button" onclick="fillDemo()">Пример ОКС</button>
+      </div>
+      <div class="status" id="status">Готов к запросу</div>
+      <div class="err" id="err"></div>
     </div>
-    <div class="status" id="status">Готов к запросу</div>
-    <div class="err" id="err"></div>
+    <div id="documentTool" class="hidden">
+      <h1>Разбор медицинского PDF</h1>
+      <p class="sub">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
+      <label class="upload">
+        <strong>Выберите PDF с текстовым слоем</strong>
+        <span class="hint">До 8 МБ и 40 страниц. Сканы без OCR пока не поддерживаются.</span>
+        <input type="file" id="documentFile" accept="application/pdf,.pdf">
+      </label>
+      <label class="consent">
+        <input type="checkbox" id="documentConsent">
+        <span>Подтверждаю, что использую только синтетический или заранее обезличенный документ без данных реального пациента.</span>
+      </label>
+      <button class="btn" id="documentAnalyzeBtn" type="button" onclick="analyzeDocument()">Проверить и разобрать</button>
+      <p class="hint">PDF не добавляется в постоянное хранилище. После обработки остаётся только временная сессия с обезличенным текстом.</p>
+      <div class="status" id="documentStatus">Готов к загрузке</div>
+      <div class="err" id="documentError"></div>
+    </div>
   </section>
   <section class="panel right">
-    <div id="empty" class="empty">Карточка протокола появится после запроса</div>
-    <div class="pc" id="card" style="display:none">
-      <div class="pc-h">
-        <div style="display:flex;align-items:center;gap:12px;min-width:0">
-          <span class="mkb" id="cardMkb">—</span>
-          <strong id="cardTitle" style="line-height:1.3">Протокол</strong>
+    <div id="clinicalOutput">
+      <div id="empty" class="empty">Карточка протокола появится после запроса</div>
+      <div class="pc" id="card" style="display:none">
+        <div class="pc-h">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            <span class="mkb" id="cardMkb">—</span>
+            <strong id="cardTitle" style="line-height:1.3">Протокол</strong>
+          </div>
+          <div class="meta" id="cardMeta"></div>
         </div>
-        <div class="meta" id="cardMeta"></div>
+        <div class="pt">
+          <button class="pt-b active" data-tab="rf" onclick="tab('rf')"><span class="dot b"></span>РФ · рекомендации</button>
+          <button class="pt-b" data-tab="intl" onclick="tab('intl')"><span class="dot p"></span>Международные · рекомендации</button>
+        </div>
+        <div class="pb">
+          <div class="pane active" id="pane-rf">
+            <div id="rfSections"></div>
+            <div class="src" id="rfSrc"></div>
+          </div>
+          <div class="pane" id="pane-intl">
+            <div id="intlSections"></div>
+            <div class="src" id="intlSrc"></div>
+          </div>
+          <div class="learning" id="learning" style="display:none"></div>
+          <div class="disc" id="disc"></div>
+        </div>
       </div>
-      <div class="pt">
-        <button class="pt-b active" data-tab="rf" onclick="tab('rf')"><span class="dot b"></span>РФ · рекомендации</button>
-        <button class="pt-b" data-tab="intl" onclick="tab('intl')"><span class="dot p"></span>Международные · рекомендации</button>
-      </div>
-      <div class="pb">
-        <div class="pane active" id="pane-rf">
-          <div id="rfSections"></div>
-          <div class="src" id="rfSrc"></div>
+    </div>
+    <div id="documentOutput" class="hidden">
+      <div id="documentEmpty" class="empty">Здесь появится разбор документа с постраничными цитатами</div>
+      <div class="pc" id="documentCard" style="display:none">
+        <div class="pc-h">
+          <div>
+            <strong id="documentType">Медицинский документ</strong>
+            <div class="hint" id="documentExpiry"></div>
+          </div>
+          <div class="meta" id="documentMeta"></div>
         </div>
-        <div class="pane" id="pane-intl">
-          <div id="intlSections"></div>
-          <div class="src" id="intlSrc"></div>
+        <div class="pb">
+          <div class="doc-section">
+            <h4>Краткая выжимка</h4>
+            <div class="body" id="documentSummary"></div>
+          </div>
+          <div id="documentSections"></div>
+          <div class="disc" id="documentDisclaimer"></div>
+          <div class="qa-box">
+            <h4>Вопрос по документу</h4>
+            <textarea id="documentQuestion" placeholder="Например: какой показатель указан на второй странице?"></textarea>
+            <div class="doc-actions">
+              <button class="btn" id="documentQuestionBtn" type="button" onclick="askDocumentQuestion()">Найти в документе</button>
+              <button class="btn danger" type="button" onclick="deleteDocumentSession()">Удалить сессию</button>
+            </div>
+            <div class="status" id="documentQuestionStatus"></div>
+            <div class="err" id="documentQuestionError"></div>
+            <div id="documentAnswer" class="doc-section hidden" style="margin-top:12px"></div>
+          </div>
         </div>
-        <div class="learning" id="learning" style="display:none"></div>
-        <div class="disc" id="disc"></div>
       </div>
     </div>
   </section>
@@ -147,6 +222,17 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 <script>
 const API = '/api/ai';
 let healthState = { llm_mode: 'mock', keys_ready: false };
+let documentSessionId = null;
+
+function setWorkspace(name){
+  const documentMode = name === 'document';
+  document.getElementById('clinicalTool').classList.toggle('hidden', documentMode);
+  document.getElementById('documentTool').classList.toggle('hidden', !documentMode);
+  document.getElementById('clinicalOutput').classList.toggle('hidden', documentMode);
+  document.getElementById('documentOutput').classList.toggle('hidden', !documentMode);
+  document.getElementById('workspaceClinical').classList.toggle('active', !documentMode);
+  document.getElementById('workspaceDocument').classList.toggle('active', documentMode);
+}
 
 function applyModeUi(d){
   healthState = d;
@@ -368,6 +454,174 @@ async function ask(){
   }finally{
     btn.disabled = false;
   }
+}
+
+function appendDocSection(container, title, items){
+  if(!items || !items.length) return;
+  const section = document.createElement('div');
+  section.className = 'doc-section';
+  const heading = document.createElement('h4');
+  heading.textContent = title;
+  section.appendChild(heading);
+  const list = document.createElement('ul');
+  items.forEach(item=>{
+    const li = document.createElement('li');
+    li.textContent = item.text || String(item);
+    if(item.page && item.source_quote){
+      const source = document.createElement('small');
+      source.textContent = `Стр. ${item.page}: «${item.source_quote}»`;
+      li.appendChild(source);
+    }
+    list.appendChild(li);
+  });
+  section.appendChild(list);
+  container.appendChild(section);
+}
+
+function appendTextSection(container, title, items){
+  if(!items || !items.length) return;
+  appendDocSection(container, title, items.map(text=>({text})));
+}
+
+function renderDocument(data){
+  documentSessionId = data.session_id;
+  document.getElementById('documentEmpty').style.display = 'none';
+  document.getElementById('documentCard').style.display = 'block';
+  document.getElementById('documentType').textContent = data.analysis.document_type || 'Медицинский документ';
+  document.getElementById('documentExpiry').textContent =
+    `Временная сессия до ${new Date(data.expires_at).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+  document.getElementById('documentSummary').textContent = data.analysis.summary || '';
+  document.getElementById('documentDisclaimer').textContent = data.disclaimer || '';
+
+  const meta = document.getElementById('documentMeta');
+  meta.innerHTML = '';
+  [`${data.pages} стр.`, `${data.character_count} зн.`, `режим ${data.llm_mode}`].forEach(label=>{
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = label;
+    meta.appendChild(chip);
+  });
+
+  const sections = document.getElementById('documentSections');
+  sections.innerHTML = '';
+  appendDocSection(sections, 'Диагнозы и формулировки документа', data.analysis.diagnoses);
+  appendDocSection(sections, 'Показатели', data.analysis.measurements);
+  appendDocSection(sections, 'Лекарства и дозировки — только как факты документа', data.analysis.medications);
+  appendDocSection(sections, 'Значимые сведения', data.analysis.findings);
+  appendDocSection(sections, 'Противоречия', data.analysis.contradictions);
+  appendDocSection(sections, 'Явно указанные тревожные признаки', data.analysis.red_flags);
+  appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
+  appendTextSection(sections, 'Вопросы лечащему врачу', data.analysis.questions_for_doctor);
+  appendTextSection(sections, 'Ограничения', data.analysis.limitations);
+
+  const privacy = [];
+  privacy.push(`Автоматически скрыто фрагментов: ${data.pii.total_replacements}`);
+  if(data.pii.review_required) privacy.push('Нужна ручная проверка обезличивания; внешний AI заблокирован.');
+  if(data.security.prompt_injection_detected) privacy.push('Обнаружены инструкции внутри PDF; внешний AI заблокирован.');
+  appendTextSection(sections, 'Конфиденциальность и безопасность', privacy);
+
+  document.getElementById('documentAnswer').classList.add('hidden');
+  document.getElementById('documentAnswer').textContent = '';
+  document.getElementById('documentQuestionStatus').textContent = '';
+  document.getElementById('documentQuestionError').textContent = '';
+}
+
+async function analyzeDocument(){
+  const fileInput = document.getElementById('documentFile');
+  const consent = document.getElementById('documentConsent');
+  const error = document.getElementById('documentError');
+  const status = document.getElementById('documentStatus');
+  const button = document.getElementById('documentAnalyzeBtn');
+  error.textContent = '';
+  if(!fileInput.files.length){ error.textContent = 'Выберите PDF.'; return; }
+  if(!consent.checked){ error.textContent = 'Нужно подтвердить, что документ синтетический или обезличенный.'; return; }
+  const form = new FormData();
+  form.append('file', fileInput.files[0]);
+  form.append('confirmed_deidentified', 'true');
+  button.disabled = true;
+  status.textContent = 'Проверка PDF → извлечение → обезличивание → анализ…';
+  try{
+    const response = await fetch(API + '/documents/analyze', {method:'POST', body:form});
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.detail || data.error || 'Не удалось разобрать PDF');
+    renderDocument(data);
+    status.textContent = `Готово · ${data.pages} стр. · режим ${data.llm_mode}`;
+  }catch(e){
+    error.textContent = e.message || String(e);
+    status.textContent = 'Документ не обработан';
+  }finally{
+    button.disabled = false;
+  }
+}
+
+async function askDocumentQuestion(){
+  const question = document.getElementById('documentQuestion').value.trim();
+  const error = document.getElementById('documentQuestionError');
+  const status = document.getElementById('documentQuestionStatus');
+  const button = document.getElementById('documentQuestionBtn');
+  error.textContent = '';
+  if(!documentSessionId){ error.textContent = 'Сначала загрузите документ.'; return; }
+  if(question.length < 3){ error.textContent = 'Введите вопрос по документу.'; return; }
+  button.disabled = true;
+  status.textContent = 'Поиск ответа только в документе…';
+  try{
+    const response = await fetch(`${API}/documents/${encodeURIComponent(documentSessionId)}/questions`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question}),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.detail || data.error || 'Не удалось ответить');
+    const answer = document.getElementById('documentAnswer');
+    answer.innerHTML = '';
+    const heading = document.createElement('h4');
+    heading.textContent = 'Ответ по документу';
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = data.answer;
+    answer.appendChild(heading);
+    answer.appendChild(body);
+    if(data.evidence && data.evidence.length){
+      const list = document.createElement('ul');
+      data.evidence.forEach(item=>{
+        const li = document.createElement('li');
+        li.textContent = `Стр. ${item.page}: «${item.source_quote}»`;
+        list.appendChild(li);
+      });
+      answer.appendChild(list);
+    }
+    if(data.limitations && data.limitations.length){
+      const note = document.createElement('small');
+      note.textContent = data.limitations.join(' ');
+      answer.appendChild(note);
+    }
+    answer.classList.remove('hidden');
+    status.textContent = `Готово · режим ${data.llm_mode}`;
+  }catch(e){
+    error.textContent = e.message || String(e);
+    status.textContent = 'Ошибка ответа';
+  }finally{
+    button.disabled = false;
+  }
+}
+
+async function deleteDocumentSession(){
+  if(documentSessionId){
+    try{
+      const response = await fetch(`${API}/documents/${encodeURIComponent(documentSessionId)}`, {method:'DELETE'});
+      const data = await response.json();
+      if(!response.ok || !data.ok) throw new Error(data.detail || data.error || 'Удаление не подтверждено');
+    }catch(e){
+      document.getElementById('documentQuestionError').textContent = e.message || String(e);
+      document.getElementById('documentStatus').textContent = 'Не удалось подтвердить удаление сессии';
+      return;
+    }
+  }
+  documentSessionId = null;
+  document.getElementById('documentCard').style.display = 'none';
+  document.getElementById('documentEmpty').style.display = 'block';
+  document.getElementById('documentStatus').textContent = 'Временная сессия удалена или уже истекла';
+  document.getElementById('documentQuestion').value = '';
 }
 
 refreshHealth();
