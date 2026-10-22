@@ -58,6 +58,7 @@ def health() -> HealthResponse:
         documents_enabled=settings.document_analysis_enabled,
         document_external_llm=settings.document_external_llm_ready,
         document_sessions=document_store.count(),
+        insurance_official_search=settings.insurance_official_search_enabled,
     )
 
 

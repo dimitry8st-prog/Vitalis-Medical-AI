@@ -140,8 +140,14 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <div class="err" id="err"></div>
     </div>
     <div id="documentTool" class="hidden">
-      <h1>Разбор медицинского PDF</h1>
-      <p class="sub">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
+      <h1 id="documentHeading">Разбор медицинского PDF</h1>
+      <p class="sub" id="documentIntro">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
+      <div class="controls">
+        <select id="documentKind" onchange="updateDocumentMode()">
+          <option value="medical">Медицинский документ</option>
+          <option value="insurance">Страховой договор или полис</option>
+        </select>
+      </div>
       <label class="upload">
         <strong>Выберите PDF с текстовым слоем</strong>
         <span class="hint">До 8 МБ и 40 страниц. Сканы без OCR пока не поддерживаются.</span>
@@ -149,7 +155,11 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       </label>
       <label class="consent">
         <input type="checkbox" id="documentConsent">
-        <span>Подтверждаю, что использую только синтетический или заранее обезличенный документ без данных реального пациента.</span>
+        <span>Подтверждаю, что использую только синтетический или заранее обезличенный документ без персональных данных реального человека.</span>
+      </label>
+      <label class="consent hidden" id="insuranceSearchOption">
+        <input type="checkbox" id="insuranceOfficialSearch" checked>
+        <span>Если условий покрытия нет в PDF, искать справочную информацию только на проверенном официальном сайте страховщика.</span>
       </label>
       <button class="btn" id="documentAnalyzeBtn" type="button" onclick="analyzeDocument()">Проверить и разобрать</button>
       <p class="hint">PDF не добавляется в постоянное хранилище. После обработки остаётся только временная сессия с обезличенным текстом.</p>
@@ -191,7 +201,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <div class="pc" id="documentCard" style="display:none">
         <div class="pc-h">
           <div>
-            <strong id="documentType">Медицинский документ</strong>
+            <strong id="documentType">Документ</strong>
             <div class="hint" id="documentExpiry"></div>
           </div>
           <div class="meta" id="documentMeta"></div>
@@ -204,7 +214,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
           <div id="documentSections"></div>
           <div class="disc" id="documentDisclaimer"></div>
           <div class="qa-box">
-            <h4>Вопрос по документу</h4>
+            <h4 id="documentQuestionHeading">Вопрос по документу</h4>
             <textarea id="documentQuestion" placeholder="Например: какой показатель указан на второй странице?"></textarea>
             <div class="doc-actions">
               <button class="btn" id="documentQuestionBtn" type="button" onclick="askDocumentQuestion()">Найти в документе</button>
@@ -223,6 +233,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 const API = '/api/ai';
 let healthState = { llm_mode: 'mock', keys_ready: false };
 let documentSessionId = null;
+let documentSessionKind = 'medical';
 
 function setWorkspace(name){
   const documentMode = name === 'document';
@@ -232,6 +243,24 @@ function setWorkspace(name){
   document.getElementById('documentOutput').classList.toggle('hidden', !documentMode);
   document.getElementById('workspaceClinical').classList.toggle('active', !documentMode);
   document.getElementById('workspaceDocument').classList.toggle('active', documentMode);
+}
+
+function updateDocumentMode(){
+  const kind = document.getElementById('documentKind').value;
+  const insurance = kind === 'insurance';
+  document.getElementById('documentHeading').textContent = insurance
+    ? 'Разбор страхового договора'
+    : 'Разбор медицинского PDF';
+  document.getElementById('documentIntro').textContent = insurance
+    ? 'Vitalis находит тип страховки, покрытие, исключения и лимиты. Если покрытия нет в PDF, поиск ограничивается официальным сайтом распознанной страховой компании.'
+    : 'Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.';
+  document.getElementById('insuranceSearchOption').classList.toggle('hidden', !insurance);
+  document.getElementById('documentQuestion').placeholder = insurance
+    ? 'Например: какой это тип страховки и что входит в покрытие?'
+    : 'Например: какой показатель указан на второй странице?';
+  document.getElementById('documentQuestionHeading').textContent = insurance
+    ? 'Вопрос по договору и официальным материалам'
+    : 'Вопрос по документу';
 }
 
 function applyModeUi(d){
@@ -483,11 +512,56 @@ function appendTextSection(container, title, items){
   appendDocSection(container, title, items.map(text=>({text})));
 }
 
+function safeExternalUrl(value){
+  try{
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.href : null;
+  }catch{
+    return null;
+  }
+}
+
+function appendOfficialSources(container, lookup){
+  if(!lookup) return;
+  if(lookup.warning) appendTextSection(container, 'Проверка официального сайта', [lookup.warning]);
+  if(!lookup.sources || !lookup.sources.length) return;
+  const section = document.createElement('div');
+  section.className = 'doc-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Официальный сайт страховщика · дополнительная справка';
+  section.appendChild(heading);
+  const list = document.createElement('ul');
+  lookup.sources.forEach(source=>{
+    const li = document.createElement('li');
+    const url = safeExternalUrl(source.url);
+    if(url){
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = source.title || source.domain;
+      li.appendChild(link);
+    }else{
+      li.textContent = source.title || source.domain;
+    }
+    const evidence = source.evidence_excerpt || source.snippet;
+    if(evidence){
+      const note = document.createElement('small');
+      note.textContent = evidence;
+      li.appendChild(note);
+    }
+    list.appendChild(li);
+  });
+  section.appendChild(list);
+  container.appendChild(section);
+}
+
 function renderDocument(data){
   documentSessionId = data.session_id;
+  documentSessionKind = data.document_kind || 'medical';
   document.getElementById('documentEmpty').style.display = 'none';
   document.getElementById('documentCard').style.display = 'block';
-  document.getElementById('documentType').textContent = data.analysis.document_type || 'Медицинский документ';
+  document.getElementById('documentType').textContent = data.analysis.document_type || 'Документ';
   document.getElementById('documentExpiry').textContent =
     `Временная сессия до ${new Date(data.expires_at).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
   document.getElementById('documentSummary').textContent = data.analysis.summary || '';
@@ -495,7 +569,8 @@ function renderDocument(data){
 
   const meta = document.getElementById('documentMeta');
   meta.innerHTML = '';
-  [`${data.pages} стр.`, `${data.character_count} зн.`, `режим ${data.llm_mode}`].forEach(label=>{
+  const kindLabel = documentSessionKind === 'insurance' ? 'страхование' : 'медицина';
+  [`${data.pages} стр.`, `${data.character_count} зн.`, kindLabel, `режим ${data.llm_mode}`].forEach(label=>{
     const chip = document.createElement('span');
     chip.className = 'chip';
     chip.textContent = label;
@@ -504,14 +579,32 @@ function renderDocument(data){
 
   const sections = document.getElementById('documentSections');
   sections.innerHTML = '';
-  appendDocSection(sections, 'Диагнозы и формулировки документа', data.analysis.diagnoses);
-  appendDocSection(sections, 'Показатели', data.analysis.measurements);
-  appendDocSection(sections, 'Лекарства и дозировки — только как факты документа', data.analysis.medications);
-  appendDocSection(sections, 'Значимые сведения', data.analysis.findings);
-  appendDocSection(sections, 'Противоречия', data.analysis.contradictions);
-  appendDocSection(sections, 'Явно указанные тревожные признаки', data.analysis.red_flags);
-  appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
-  appendTextSection(sections, 'Вопросы лечащему врачу', data.analysis.questions_for_doctor);
+  if(documentSessionKind === 'insurance'){
+    const identity = [];
+    if(data.analysis.insurer_name) identity.push(`Страховщик: ${data.analysis.insurer_name}`);
+    if(data.analysis.insurance_type) identity.push(`Тип: ${data.analysis.insurance_type}`);
+    if(data.analysis.policy_name) identity.push(`Программа: ${data.analysis.policy_name}`);
+    appendTextSection(sections, 'Определение договора', identity);
+    appendDocSection(sections, 'Что входит в страховое покрытие', data.analysis.coverage);
+    appendDocSection(sections, 'Исключения', data.analysis.exclusions);
+    appendDocSection(sections, 'Лимиты и страховые суммы', data.analysis.limits);
+    appendDocSection(sections, 'Франшиза', data.analysis.deductibles);
+    appendDocSection(sections, 'Срок действия', data.analysis.validity);
+    appendDocSection(sections, 'Что делать при страховом случае', data.analysis.claim_procedure);
+    appendDocSection(sections, 'Контакты из договора', data.analysis.contacts);
+    appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
+    appendTextSection(sections, 'Вопросы страховой компании', data.analysis.questions_for_insurer);
+    appendOfficialSources(sections, data.insurance_lookup);
+  }else{
+    appendDocSection(sections, 'Диагнозы и формулировки документа', data.analysis.diagnoses);
+    appendDocSection(sections, 'Показатели', data.analysis.measurements);
+    appendDocSection(sections, 'Лекарства и дозировки — только как факты документа', data.analysis.medications);
+    appendDocSection(sections, 'Значимые сведения', data.analysis.findings);
+    appendDocSection(sections, 'Противоречия', data.analysis.contradictions);
+    appendDocSection(sections, 'Явно указанные тревожные признаки', data.analysis.red_flags);
+    appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
+    appendTextSection(sections, 'Вопросы лечащему врачу', data.analysis.questions_for_doctor);
+  }
   appendTextSection(sections, 'Ограничения', data.analysis.limitations);
 
   const privacy = [];
@@ -538,8 +631,16 @@ async function analyzeDocument(){
   const form = new FormData();
   form.append('file', fileInput.files[0]);
   form.append('confirmed_deidentified', 'true');
+  const kind = document.getElementById('documentKind').value;
+  form.append('document_kind', kind);
+  form.append(
+    'search_official_sources',
+    kind === 'insurance' && document.getElementById('insuranceOfficialSearch').checked ? 'true' : 'false',
+  );
   button.disabled = true;
-  status.textContent = 'Проверка PDF → извлечение → обезличивание → анализ…';
+  status.textContent = kind === 'insurance'
+    ? 'Проверка PDF → обезличивание → договор → официальный сайт при нехватке данных…'
+    : 'Проверка PDF → извлечение → обезличивание → анализ…';
   try{
     const response = await fetch(API + '/documents/analyze', {method:'POST', body:form});
     const data = await response.json();
@@ -563,12 +664,14 @@ async function askDocumentQuestion(){
   if(!documentSessionId){ error.textContent = 'Сначала загрузите документ.'; return; }
   if(question.length < 3){ error.textContent = 'Введите вопрос по документу.'; return; }
   button.disabled = true;
-  status.textContent = 'Поиск ответа только в документе…';
+  status.textContent = documentSessionKind === 'insurance'
+    ? 'Сначала поиск в договоре, затем — в уже проверенных материалах страховщика…'
+    : 'Поиск ответа только в документе…';
   try{
     const response = await fetch(`${API}/documents/${encodeURIComponent(documentSessionId)}/questions`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question}),
+      body:JSON.stringify({question, use_official_web: documentSessionKind === 'insurance'}),
     });
     const data = await response.json();
     if(!response.ok) throw new Error(data.detail || data.error || 'Не удалось ответить');
@@ -589,6 +692,12 @@ async function askDocumentQuestion(){
         list.appendChild(li);
       });
       answer.appendChild(list);
+    }
+    if(data.official_sources && data.official_sources.length){
+      appendOfficialSources(answer, {
+        sources: data.official_sources,
+        warning: 'Это общая справка с официального сайта; приоритет имеет ваш договор и указанная в нём редакция правил.',
+      });
     }
     if(data.limitations && data.limitations.length){
       const note = document.createElement('small');
@@ -618,12 +727,14 @@ async function deleteDocumentSession(){
     }
   }
   documentSessionId = null;
+  documentSessionKind = document.getElementById('documentKind').value;
   document.getElementById('documentCard').style.display = 'none';
   document.getElementById('documentEmpty').style.display = 'block';
   document.getElementById('documentStatus').textContent = 'Временная сессия удалена или уже истекла';
   document.getElementById('documentQuestion').value = '';
 }
 
+updateDocumentMode();
 refreshHealth();
 </script>
 </body>

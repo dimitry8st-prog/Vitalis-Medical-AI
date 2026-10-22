@@ -11,6 +11,7 @@ services:
       GIGACHAT_ENABLED: "false"
       DOCUMENT_ANALYSIS_ENABLED: "true"
       DOCUMENT_EXTERNAL_LLM_ENABLED: "false"
+      INSURANCE_OFFICIAL_SEARCH_ENABLED: "true"
       VAULT_PATH: /app/vault
       FAISS_INDEX_PATH: /data/faiss
     volumes:

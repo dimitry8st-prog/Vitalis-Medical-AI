@@ -90,6 +90,28 @@ async def web_search(
     return selected
 
 
+async def provider_search(
+    query: str,
+    settings: Settings,
+    max_results: int = 5,
+) -> list[dict[str, Any]]:
+    """Run one bounded provider query for a caller that applies its own source policy."""
+    if not query.strip():
+        return []
+    try:
+        return await asyncio.wait_for(
+            _run_provider(
+                settings.web_search_provider,
+                query,
+                settings,
+                max(1, min(max_results, 10)),
+            ),
+            timeout=12.0,
+        )
+    except TimeoutError:
+        return []
+
+
 def _merge(
     all_hits: list[dict[str, Any]],
     seen: set[str],

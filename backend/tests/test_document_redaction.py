@@ -35,6 +35,35 @@ class DocumentRedactionTests(unittest.TestCase):
         self.assertTrue(report.review_required)
         self.assertTrue(report.warnings)
 
+    def test_redacts_insurance_identifiers(self) -> None:
+        pages = (
+            DocumentPage(
+                number=1,
+                text=(
+                    "Страхователь: Иванов Иван Александрович\n"
+                    "Номер полиса: DMS-123456789\n"
+                    "VIN: XTA12345678901234\n"
+                    "Тип страхования: ДМС"
+                ),
+            ),
+        )
+        redacted, report = redact_pages(pages)
+        self.assertNotIn("Иванов", redacted[0].text)
+        self.assertNotIn("DMS-123456789", redacted[0].text)
+        self.assertNotIn("XTA12345678901234", redacted[0].text)
+        self.assertIn("Тип страхования: ДМС", redacted[0].text)
+        self.assertGreaterEqual(report.total_replacements, 3)
+
+    def test_does_not_treat_insurer_name_as_policy_number(self) -> None:
+        pages = (
+            DocumentPage(
+                number=1,
+                text="Договор страхования СОГАЗ\nТип страхования: ДМС",
+            ),
+        )
+        redacted, _ = redact_pages(pages)
+        self.assertIn("СОГАЗ", redacted[0].text)
+
 
 if __name__ == "__main__":
     unittest.main()

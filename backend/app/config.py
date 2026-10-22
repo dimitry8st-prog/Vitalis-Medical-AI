@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     document_session_ttl_seconds: int = 1_800
     document_max_sessions: int = 32
     document_require_deidentified_confirmation: bool = True
+    insurance_official_search_enabled: bool = True
+    insurance_web_max_results: int = 3
+    insurance_web_timeout_seconds: int = 12
+    insurance_web_max_bytes: int = 3_000_000
 
     @property
     def origins(self) -> list[str]:

@@ -44,6 +44,7 @@ class HealthResponse(BaseModel):
     documents_enabled: bool = False
     document_external_llm: bool = False
     document_sessions: int = 0
+    insurance_official_search: bool = False
 
 
 class ModeRequest(BaseModel):

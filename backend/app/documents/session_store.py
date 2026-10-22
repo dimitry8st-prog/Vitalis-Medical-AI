@@ -4,13 +4,14 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Literal
 
 from app.documents.models import (
-    DocumentAnalysis,
+    AnalysisPayload,
     DocumentPage,
+    InsuranceWebLookup,
     PiiReport,
     SecurityReport,
 )
@@ -22,10 +23,12 @@ class StoredDocument:
     created_at_epoch: float
     expires_at_epoch: float
     pages: tuple[DocumentPage, ...]
-    analysis: DocumentAnalysis
+    analysis: AnalysisPayload
     pii: PiiReport
     security: SecurityReport
     llm_mode: Literal["mock", "live", "disabled"]
+    document_kind: Literal["medical", "insurance"]
+    insurance_lookup: InsuranceWebLookup | None
 
     @property
     def expires_at(self) -> datetime:
@@ -63,10 +66,12 @@ class DocumentSessionStore:
         self,
         *,
         pages: tuple[DocumentPage, ...],
-        analysis: DocumentAnalysis,
+        analysis: AnalysisPayload,
         pii: PiiReport,
         security: SecurityReport,
         llm_mode: Literal["mock", "live", "disabled"],
+        document_kind: Literal["medical", "insurance"] = "medical",
+        insurance_lookup: InsuranceWebLookup | None = None,
     ) -> StoredDocument:
         now = self._clock()
         with self._lock:
@@ -87,6 +92,8 @@ class DocumentSessionStore:
                 pii=pii,
                 security=security,
                 llm_mode=llm_mode,
+                document_kind=document_kind,
+                insurance_lookup=insurance_lookup,
             )
             self._sessions[session_id] = item
             return item
@@ -100,6 +107,21 @@ class DocumentSessionStore:
     def delete(self, session_id: str) -> bool:
         with self._lock:
             return self._sessions.pop(session_id, None) is not None
+
+    def set_insurance_lookup(
+        self,
+        session_id: str,
+        lookup: InsuranceWebLookup,
+    ) -> StoredDocument | None:
+        now = self._clock()
+        with self._lock:
+            self._purge_expired(now)
+            item = self._sessions.get(session_id)
+            if item is None:
+                return None
+            updated = replace(item, insurance_lookup=lookup)
+            self._sessions[session_id] = updated
+            return updated
 
     def count(self) -> int:
         now = self._clock()
