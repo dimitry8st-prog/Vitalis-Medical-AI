@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -16,11 +16,14 @@ from app.documents.extractor import (
     read_upload_limited,
     validate_upload_metadata,
 )
+from app.documents.insurance_search import InsuranceOfficialSearch
 from app.documents.models import (
     DocumentDeleteResponse,
     DocumentQuestionRequest,
     DocumentQuestionResponse,
     DocumentSessionResponse,
+    InsuranceAnalysis,
+    InsuranceWebLookup,
 )
 from app.documents.redactor import redact_pages
 from app.documents.security import scan_untrusted_text
@@ -29,6 +32,11 @@ from app.documents.session_store import DocumentSessionStore, StoredDocument
 DOCUMENT_DISCLAIMER = (
     "Автоматический разбор предназначен для навигации по документу, не является диагнозом "
     "или назначением и требует проверки врачом по исходному PDF."
+)
+INSURANCE_DISCLAIMER = (
+    "Автоматический разбор помогает ориентироваться в договоре, но не является "
+    "юридическим заключением и не гарантирует страховую выплату. Приоритет имеют "
+    "ваш полис и указанная в нём редакция правил страхования."
 )
 logger = logging.getLogger(__name__)
 
@@ -41,13 +49,19 @@ def _session_response(item: StoredDocument) -> DocumentSessionResponse:
     return DocumentSessionResponse(
         session_id=item.session_id,
         expires_at=item.expires_at,
+        document_kind=item.document_kind,
         pages=len(item.pages),
         character_count=item.character_count,
         llm_mode=item.llm_mode,
         analysis=item.analysis,
+        insurance_lookup=item.insurance_lookup,
         pii=item.pii,
         security=item.security,
-        disclaimer=DOCUMENT_DISCLAIMER,
+        disclaimer=(
+            INSURANCE_DISCLAIMER
+            if item.document_kind == "insurance"
+            else DOCUMENT_DISCLAIMER
+        ),
     )
 
 
@@ -55,13 +69,17 @@ def create_documents_router(
     settings: Settings,
     analyzer: DocumentAnalyzer,
     store: DocumentSessionStore,
+    insurance_search: InsuranceOfficialSearch | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/documents", tags=["documents"])
+    official_search = insurance_search or InsuranceOfficialSearch(settings)
 
     @router.post("/analyze", response_model=DocumentSessionResponse)
     async def analyze_document(
         file: Annotated[UploadFile, File(...)],
         confirmed_deidentified: Annotated[bool, Form()] = False,
+        document_kind: Annotated[Literal["medical", "insurance"], Form()] = "medical",
+        search_official_sources: Annotated[bool, Form()] = True,
     ) -> DocumentSessionResponse:
         if not settings.document_analysis_enabled:
             raise HTTPException(
@@ -115,11 +133,25 @@ def create_documents_router(
             analysis, llm_mode = await analyzer.analyze(
                 redacted_pages,
                 allow_external=allow_external,
+                document_kind=document_kind,
             )
         except DocumentAnalysisError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
             ) from exc
+
+        insurance_lookup: InsuranceWebLookup | None = None
+        if document_kind == "insurance":
+            if not isinstance(analysis, InsuranceAnalysis):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Получен неверный тип разбора страхового документа.",
+                )
+            insurance_lookup = await official_search.lookup_missing_coverage(
+                redacted_pages,
+                analysis,
+                requested=search_official_sources,
+            )
 
         item = store.create(
             pages=redacted_pages,
@@ -127,10 +159,13 @@ def create_documents_router(
             pii=pii_report,
             security=security_report,
             llm_mode=llm_mode,
+            document_kind=document_kind,
+            insurance_lookup=insurance_lookup,
         )
         logger.info(
-            "document_analysis_completed session=%s pages=%d chars=%d mode=%s pii_replacements=%d injection=%s",
+            "document_analysis_completed session=%s kind=%s pages=%d chars=%d mode=%s pii_replacements=%d injection=%s",
             _safe_session_ref(item.session_id),
+            item.document_kind,
             len(item.pages),
             item.character_count,
             item.llm_mode,
@@ -160,11 +195,34 @@ def create_documents_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Сессия не найдена или истекла.",
             )
+        if (
+            item.document_kind == "insurance"
+            and body.use_official_web
+            and isinstance(item.analysis, InsuranceAnalysis)
+            and (
+                item.insurance_lookup is None
+                or item.insurance_lookup.status == "not_requested"
+            )
+        ):
+            lookup = await official_search.lookup_missing_coverage(
+                item.pages,
+                item.analysis,
+                requested=True,
+            )
+            item = store.set_insurance_lookup(session_id, lookup) or item
+
+        sources = (
+            item.insurance_lookup.sources
+            if body.use_official_web and item.insurance_lookup is not None
+            else []
+        )
         try:
             answer, llm_mode = await analyzer.answer_question(
                 item.pages,
                 body.question,
                 allow_external=item.llm_mode == "live",
+                document_kind=item.document_kind,
+                official_sources=sources,
             )
         except DocumentAnalysisError as exc:
             raise HTTPException(
@@ -178,11 +236,17 @@ def create_documents_router(
         )
         return DocumentQuestionResponse(
             session_id=session_id,
+            document_kind=item.document_kind,
             llm_mode=llm_mode,
             answer=answer.answer,
             evidence=answer.evidence,
+            official_sources=answer.official_sources,
             limitations=answer.limitations,
-            disclaimer=DOCUMENT_DISCLAIMER,
+            disclaimer=(
+                INSURANCE_DISCLAIMER
+                if item.document_kind == "insurance"
+                else DOCUMENT_DISCLAIMER
+            ),
         )
 
     @router.delete("/{session_id}", response_model=DocumentDeleteResponse)
