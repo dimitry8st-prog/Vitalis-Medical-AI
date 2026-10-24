@@ -11,6 +11,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 
 from app.config import Settings
+from app.documents.models import DocumentPage
+from app.documents.security import scan_untrusted_text
+from app.rag.document_fetch import enrich_primary_documents
+from app.rag.source_policy import (
+    classify_international_source,
+    is_international_evidence_source,
+    is_russian_official,
+)
 
 
 async def web_search(
@@ -73,7 +81,43 @@ async def web_search(
 
     for item in all_hits:
         item["relevance_score"] = _score_hit(item, f"{focus} {en_focus}")
-    return _balanced_results(all_hits, scope, max_results)
+    all_hits = [
+        item for item in all_hits
+        if not scan_untrusted_text((DocumentPage(
+            number=1, text=f"{item.get('title', '')}\n{item.get('snippet', '')}"
+        ),)).prompt_injection_detected
+    ]
+    selected = _balanced_results(all_hits, scope, max_results)
+    if scope in ("intl", "both") and settings.web_fetch_full_text:
+        selected = await enrich_primary_documents(
+            selected,
+            query,
+            max_documents=settings.web_fetch_max_documents,
+            max_bytes=settings.web_fetch_max_bytes,
+        )
+    return selected
+
+
+async def provider_search(
+    query: str,
+    settings: Settings,
+    max_results: int = 5,
+) -> list[dict[str, Any]]:
+    """Run one bounded provider query for a caller that applies its own source policy."""
+    if not query.strip():
+        return []
+    try:
+        return await asyncio.wait_for(
+            _run_provider(
+                settings.web_search_provider,
+                query,
+                settings,
+                max(1, min(max_results, 10)),
+            ),
+            timeout=12.0,
+        )
+    except TimeoutError:
+        return []
 
 
 def _merge(
@@ -87,10 +131,20 @@ def _merge(
         if item.get("provider") == "error":
             continue
         item = dict(item)
+        try:
+            parsed = urlparse(str(item.get("url") or ""))
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+                continue
+        except ValueError:
+            continue
         item["lang"] = lang
         item["query_kind"] = kind
         if lang == "ru":
             item["source_tier"] = _rf_source_tier(str(item.get("url") or ""))
+            item["jurisdiction"] = "RU"
+        else:
+            item.update(classify_international_source(str(item.get("url") or "")))
+        item["document_type"] = _document_type(kind, str(item.get("title") or ""))
         url = (item.get("url") or "").strip()
         key = url or f"{item.get('title')}|{item.get('snippet')}"
         if not key or key in seen:
@@ -134,14 +188,24 @@ def _build_queries(
             )
 
     if bilingual and scope in ("intl", "both"):
+        society_domains = _international_profile_domains(en_focus)
         out.extend(
             [
-                (f'"{en_focus}" clinical practice guideline {intent_en}', "en", "intl_guideline"),
-                (f'"{en_focus}" guideline WHO NICE European society {intent_en}', "en", "intl_europe"),
-                (f'"{en_focus}" guideline NIH CDC American society {intent_en}', "en", "intl_us"),
-                (f'"{en_focus}" systematic review meta-analysis consensus {intent_en}', "en", "intl_literature"),
+                (f'site:who.int "{en_focus}" guideline {intent_en}', "en", "intl_who"),
+                (f'site:nice.org.uk "{en_focus}" guidance {intent_en}', "en", "intl_uk_guideline"),
+                (f'"{en_focus}" clinical practice guideline {intent_en} ({society_domains})', "en", "intl_society_guideline"),
+                (f'"{en_focus}" guideline NIH CDC AHA ASA AAN {intent_en}', "en", "intl_us_guideline"),
+                (f'"{en_focus}" guideline Canada Australia {intent_en}', "en", "intl_other_guideline"),
+                (f'"{en_focus}" Cochrane systematic review meta-analysis {intent_en}', "en", "intl_evidence_synthesis"),
             ]
         )
+        if _needs_regulatory_search(query):
+            out.extend(
+                [
+                    (f'"{en_focus}" site:fda.gov OR site:dailymed.nlm.nih.gov dose indication', "en", "intl_us_regulator"),
+                    (f'"{en_focus}" site:ema.europa.eu OR site:bnf.nice.org.uk dose indication', "en", "intl_eu_regulator"),
+                ]
+            )
         if freshness_extra:
             out.append(
                 (f'"{en_focus}" guideline {prev} OR {year}', "en", "intl_freshness")
@@ -155,6 +219,47 @@ def _build_queries(
             seen.add(key)
             deduped.append(item)
     return deduped
+
+
+def _document_type(kind: str, title: str = "") -> str:
+    if re.search(r"\bguideline\b|practice guideline|recommendations? for", title or "", re.I):
+        return "clinical_guideline"
+    if "regulator" in kind:
+        return "drug_label_or_regulatory_document"
+    if "evidence_synthesis" in kind or kind in {"pubmed", "europe_pmc"}:
+        return "research_or_evidence_synthesis"
+    if "guideline" in kind or kind in {"intl_who", "intl_uk_guideline"}:
+        return "clinical_guideline"
+    if kind.startswith("rf_"):
+        return "russian_clinical_source"
+    return "other"
+
+
+def _needs_regulatory_search(query: str) -> bool:
+    return bool(
+        re.search(
+            r"доз|препарат|лекарств|назнач|прием|приём|таблет|инъекц|"
+            r"dose|dosage|drug|medicine|prescri",
+            query or "",
+            flags=re.I,
+        )
+    )
+
+
+def _international_profile_domains(focus: str) -> str:
+    low = (focus or "").lower()
+    profiles = (
+        (r"stroke|transient ischemic|cerebrovascular", "site:eso-stroke.org OR site:professional.heart.org OR site:ahajournals.org"),
+        (r"traumatic brain injury", "site:braintrauma.org OR site:cns.org OR site:aan.com"),
+        (r"multiple sclerosis|parkinson|alzheimer|epilep|migraine", "site:ean.org OR site:aan.com"),
+        (r"heart|myocardial|atrial|hypertension|coronary", "site:escardio.org OR site:professional.heart.org OR site:acc.org"),
+        (r"cancer|carcinoma|tumor|tumour|oncology", "site:esmo.org OR site:nccn.org"),
+        (r"asthma|pulmonary|pneumonia|bronch", "site:ersnet.org OR site:thoracic.org"),
+    )
+    for pattern, domains in profiles:
+        if re.search(pattern, low):
+            return domains
+    return "site:ean.org OR site:aan.com OR site:escardio.org"
 
 
 _RF_SEARCH_STOPWORDS = {
@@ -499,13 +604,15 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
     )
     authority = 0
     tiers = (
-        (5, ("cr.minzdrav.gov.ru", "minzdrav.gov.ru", "who.int", "nice.org.uk")),
-        (4, ("nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov", "europepmc.org", "cochranelibrary.com", "nejm.org", "thelancet.com", "jamanetwork.com", "bmj.com", "nature.com")),
-        (3, ("escardio.org", "heart.org", "acc.org", "idsociety.org", "nccn.org", "eular.org", "ersnet.org")),
+        (7, ("cr.minzdrav.gov.ru", "minzdrav.gov.ru", "who.int", "nice.org.uk", "fda.gov", "ema.europa.eu", "dailymed.nlm.nih.gov")),
+        (6, ("professional.heart.org", "ahajournals.org", "eso-stroke.org", "ean.org", "aan.com", "braintrauma.org", "strokebestpractices.ca", "strokefoundation.org.au")),
+        (5, ("nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov", "europepmc.org", "cochranelibrary.com", "nejm.org", "thelancet.com", "jamanetwork.com", "bmj.com", "nature.com")),
+        (4, ("escardio.org", "heart.org", "acc.org", "idsociety.org", "nccn.org", "eular.org", "ersnet.org", "esmo.org")),
         (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "oncology.ru", "almazovcentre.ru", "gnicpm.ru", "mediasphera.ru", "journals.eco-vector.com", "rnmot.ru", "neurology.ru", "elibrary.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru", "rehabrus.ru", "medpoint.pro", "diseases.medelement.com", "evidence-neurology.ru", "consultant.ru", "garant.ru")),
     )
     for points, domains in tiers:
-        if any(domain in url for domain in domains):
+        host = (urlparse(url).hostname or "").lower()
+        if any(host == domain or host.endswith(f".{domain}") for domain in domains):
             authority = points
             break
     kind_bonus = {
@@ -515,6 +622,14 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         "rf_institute": 2,
         "rf_society": 2,
         "rf_journal": 1,
+        "intl_who": 5,
+        "intl_uk_guideline": 5,
+        "intl_society_guideline": 5,
+        "intl_us_guideline": 4,
+        "intl_other_guideline": 3,
+        "intl_us_regulator": 5,
+        "intl_eu_regulator": 5,
+        "intl_evidence_synthesis": 2,
     }.get(str(item.get("query_kind") or ""), 0)
     international_penalty = 6 if item.get("lang") == "ru" and _is_international_url(url) else 0
     year = item.get("year") or 0
@@ -538,8 +653,15 @@ def _is_international_url(url: str) -> bool:
     domains = (
         "who.int", "nice.org.uk", "nih.gov", "cdc.gov", "pubmed.ncbi.nlm.nih.gov",
         "europepmc.org", "cochranelibrary.com", "escardio.org", "heart.org", "acc.org",
+        "eso-stroke.org", "ean.org", "aan.com", "ahajournals.org", "fda.gov",
+        "ema.europa.eu", "dailymed.nlm.nih.gov", "strokebestpractices.ca",
+        "strokefoundation.org.au", "braintrauma.org",
     )
-    return any(domain in (url or "").lower() for domain in domains)
+    try:
+        host = (urlparse(url or "").hostname or "").lower()
+    except ValueError:
+        return False
+    return any(host == domain or host.endswith(f".{domain}") for domain in domains)
 
 
 def _select_with_kind_quotas(
@@ -588,10 +710,29 @@ def _balanced_results(
     )
     if scope == "rf":
         return _select_with_kind_quotas(rf_ranked, rf_kinds, max_results * 2)
+    intl_ranked = [
+        item for item in ranked
+        if item.get("lang") == "en"
+        and item.get("relevance_score", 0) > 0
+        and not is_russian_official(str(item.get("url") or ""))
+        and is_international_evidence_source(str(item.get("url") or ""))
+    ]
+    intl_kinds = (
+        "intl_who",
+        "intl_uk_guideline",
+        "intl_society_guideline",
+        "intl_us_guideline",
+        "intl_other_guideline",
+        "intl_us_regulator",
+        "intl_eu_regulator",
+        "intl_evidence_synthesis",
+        "pubmed",
+        "europe_pmc",
+    )
     if scope == "intl":
-        return [item for item in ranked if item.get("lang") == "en"][: max_results * 2]
+        return _select_with_kind_quotas(intl_ranked, intl_kinds, max_results * 2)
     ru = _select_with_kind_quotas(rf_ranked, rf_kinds, max_results)
-    en = [item for item in ranked if item.get("lang") == "en"][:max_results]
+    en = _select_with_kind_quotas(intl_ranked, intl_kinds, max_results)
     return sorted(
         ru + en,
         key=lambda item: (item.get("relevance_score", 0), item.get("year") or 0),

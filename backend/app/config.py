@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,10 +37,29 @@ class Settings(BaseSettings):
     web_search_provider: Literal["duckduckgo", "serper", "tavily"] = "duckduckgo"
     serper_api_key: str = ""
     tavily_api_key: str = ""
+    web_fetch_full_text: bool = True
+    web_fetch_max_documents: int = Field(default=3, ge=1, le=5)
+    web_fetch_max_bytes: int = Field(default=8_000_000, ge=1, le=8_000_000)
 
     llm_mode: Literal["mock", "live"] = "mock"
     # warn: отвечать с предупреждением при сбое веб-поиска; strict: блокировать ответ.
     evidence_gate_mode: Literal["warn", "strict"] = "warn"
+
+    # Vitalis Documents. Внешний LLM для документов выключен по умолчанию:
+    # включать только после проверки правовой схемы и политики провайдера.
+    document_analysis_enabled: bool = True
+    document_external_llm_enabled: bool = False
+    document_max_file_bytes: int = Field(default=8_000_000, ge=1, le=8_000_000)
+    document_max_pages: int = Field(default=40, ge=1, le=80)
+    document_max_chars: int = Field(default=80_000, ge=20, le=500_000)
+    document_parse_timeout_seconds: int = Field(default=20, ge=1, le=25)
+    document_session_ttl_seconds: int = Field(default=1_800, ge=60, le=86_400)
+    document_max_sessions: int = Field(default=32, ge=1, le=64)
+    document_require_deidentified_confirmation: bool = True
+    insurance_official_search_enabled: bool = True
+    insurance_web_max_results: int = Field(default=3, ge=1, le=5)
+    insurance_web_timeout_seconds: int = Field(default=12, ge=1, le=30)
+    insurance_web_max_bytes: int = Field(default=3_000_000, ge=1, le=8_000_000)
 
     @property
     def origins(self) -> list[str]:
@@ -73,6 +93,15 @@ class Settings(BaseSettings):
     @property
     def deepseek_ready(self) -> bool:
         return bool(self.deepseek_api_key)
+
+    @property
+    def document_external_llm_ready(self) -> bool:
+        return (
+            self.document_analysis_enabled
+            and self.document_external_llm_enabled
+            and self.llm_mode == "live"
+            and self.deepseek_ready
+        )
 
 
 @lru_cache

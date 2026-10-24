@@ -41,3 +41,16 @@ class HealthResponse(BaseModel):
     keys_ready: bool
     vault_chunks: int
     web_search: str
+    documents_enabled: bool = False
+    document_external_llm: bool = False
+    document_sessions: int = 0
+    insurance_official_search: bool = False
+
+
+class ModeRequest(BaseModel):
+    llm_mode: Literal["mock", "live"]
+
+
+class ModeResponse(BaseModel):
+    ok: bool
+    llm_mode: Literal["mock", "live"]

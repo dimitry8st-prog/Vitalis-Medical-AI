@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vitalis — там где понимание становится практикой, а знания — стандартом</title>
 <meta name="description" content="Система Vitalis — там где понимание становится практикой, а знания — стандартом. Клинические рекомендации: РФ и международные.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
   --navy:#0A1628;--navy-mid:#0F1D32;--slate:#64748B;--slate-light:#94A3B8;
@@ -77,6 +75,25 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .empty{color:var(--slate);font-size:14px;padding:40px 10px;text-align:center}
 .meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .chip{font-family:var(--mn);font-size:10.5px;padding:4px 8px;border-radius:999px;background:var(--ice);border:1px solid var(--line);color:var(--slate)}
+.hidden{display:none!important}
+.workspace-switch{display:flex;gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.workspace-switch button{flex:1;border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer}
+.workspace-switch button.active{background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(10,22,40,.16)}
+.upload{display:block;border:1.5px dashed rgba(59,130,246,.35);background:var(--ice);border-radius:14px;padding:16px;margin-bottom:12px}
+.upload input{display:block;width:100%;margin-top:10px}
+.consent{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;line-height:1.45;color:var(--slate);margin:12px 0}
+.consent input{margin-top:3px;flex-shrink:0}
+.doc-meta{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+.doc-section{padding:14px;border-radius:12px;border:1px solid var(--line);margin-bottom:12px;background:#fff}
+.doc-section h4{font-size:14px;margin-bottom:8px}
+.doc-section .body{font-size:13.5px;color:var(--slate);white-space:pre-wrap;line-height:1.55}
+.doc-section ul{padding-left:18px}
+.doc-section li{font-size:13.5px;line-height:1.5;margin-bottom:10px}
+.doc-section small{display:block;color:var(--slate);margin-top:3px}
+.doc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.doc-actions .danger{background:#fff;color:var(--coral);border:1px solid rgba(239,68,68,.3)}
+.qa-box{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.qa-box textarea{min-height:78px}
 </style>
 </head>
 <body>
@@ -96,50 +113,116 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 </header>
 <main>
   <section class="panel left">
-    <h1>Клинический запрос</h1>
-    <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
-    <div class="controls">
-      <select id="mode">
-        <option value="both">РФ + международные</option>
-        <option value="rf">Только РФ · рекомендации</option>
-        <option value="intl">Только международные · рекомендации</option>
-      </select>
-      <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
+    <div class="workspace-switch" aria-label="Раздел кабинета">
+      <button type="button" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинический запрос</button>
+      <button type="button" id="workspaceDocument" onclick="setWorkspace('document')">Разбор PDF</button>
     </div>
-    <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
-    <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
-    <div class="row">
-      <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
-      <button class="btn btn-gh" type="button" onclick="fillDemo()">Пример ОКС</button>
+    <div id="clinicalTool">
+      <h1>Клинический запрос</h1>
+      <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
+      <div class="controls">
+        <select id="mode">
+          <option value="both">РФ + международные</option>
+          <option value="rf">Только РФ · рекомендации</option>
+          <option value="intl">Только международные · рекомендации</option>
+        </select>
+        <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
+      </div>
+      <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
+      <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
+      <div class="row">
+        <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
+        <button class="btn btn-gh" type="button" onclick="fillDemo()">Пример ОКС</button>
+      </div>
+      <div class="status" id="status">Готов к запросу</div>
+      <div class="err" id="err"></div>
     </div>
-    <div class="status" id="status">Готов к запросу</div>
-    <div class="err" id="err"></div>
+    <div id="documentTool" class="hidden">
+      <h1 id="documentHeading">Разбор медицинского PDF</h1>
+      <p class="sub" id="documentIntro">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
+      <div class="controls">
+        <select id="documentKind" onchange="updateDocumentMode()">
+          <option value="medical">Медицинский документ</option>
+          <option value="insurance">Страховой договор или полис</option>
+        </select>
+      </div>
+      <label class="upload">
+        <strong>Выберите PDF с текстовым слоем</strong>
+        <span class="hint">До 8 МБ и 40 страниц. Сканы без OCR пока не поддерживаются.</span>
+        <input type="file" id="documentFile" accept="application/pdf,.pdf">
+      </label>
+      <label class="consent">
+        <input type="checkbox" id="documentConsent">
+        <span>Подтверждаю, что использую только синтетический или заранее обезличенный документ без персональных данных реального человека.</span>
+      </label>
+      <label class="consent hidden" id="insuranceSearchOption">
+        <input type="checkbox" id="insuranceOfficialSearch" checked>
+        <span>Если условий покрытия нет в PDF, искать справочную информацию только на проверенном официальном сайте страховщика.</span>
+      </label>
+      <button class="btn" id="documentAnalyzeBtn" type="button" onclick="analyzeDocument()">Проверить и разобрать</button>
+      <p class="hint">PDF не добавляется в постоянное хранилище. После обработки остаётся только временная сессия с обезличенным текстом.</p>
+      <div class="status" id="documentStatus">Готов к загрузке</div>
+      <div class="err" id="documentError"></div>
+    </div>
   </section>
   <section class="panel right">
-    <div id="empty" class="empty">Карточка протокола появится после запроса</div>
-    <div class="pc" id="card" style="display:none">
-      <div class="pc-h">
-        <div style="display:flex;align-items:center;gap:12px;min-width:0">
-          <span class="mkb" id="cardMkb">—</span>
-          <strong id="cardTitle" style="line-height:1.3">Протокол</strong>
+    <div id="clinicalOutput">
+      <div id="empty" class="empty">Карточка протокола появится после запроса</div>
+      <div class="pc" id="card" style="display:none">
+        <div class="pc-h">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            <span class="mkb" id="cardMkb">—</span>
+            <strong id="cardTitle" style="line-height:1.3">Протокол</strong>
+          </div>
+          <div class="meta" id="cardMeta"></div>
         </div>
-        <div class="meta" id="cardMeta"></div>
+        <div class="pt">
+          <button class="pt-b active" data-tab="rf" onclick="tab('rf')"><span class="dot b"></span>РФ · рекомендации</button>
+          <button class="pt-b" data-tab="intl" onclick="tab('intl')"><span class="dot p"></span>Международные · рекомендации</button>
+        </div>
+        <div class="pb">
+          <div class="pane active" id="pane-rf">
+            <div id="rfSections"></div>
+            <div class="src" id="rfSrc"></div>
+          </div>
+          <div class="pane" id="pane-intl">
+            <div id="intlSections"></div>
+            <div class="src" id="intlSrc"></div>
+          </div>
+          <div class="learning" id="learning" style="display:none"></div>
+          <div class="disc" id="disc"></div>
+        </div>
       </div>
-      <div class="pt">
-        <button class="pt-b active" data-tab="rf" onclick="tab('rf')"><span class="dot b"></span>РФ · рекомендации</button>
-        <button class="pt-b" data-tab="intl" onclick="tab('intl')"><span class="dot p"></span>Международные · рекомендации</button>
-      </div>
-      <div class="pb">
-        <div class="pane active" id="pane-rf">
-          <div id="rfSections"></div>
-          <div class="src" id="rfSrc"></div>
+    </div>
+    <div id="documentOutput" class="hidden">
+      <div id="documentEmpty" class="empty">Здесь появится разбор документа с постраничными цитатами</div>
+      <div class="pc" id="documentCard" style="display:none">
+        <div class="pc-h">
+          <div>
+            <strong id="documentType">Документ</strong>
+            <div class="hint" id="documentExpiry"></div>
+          </div>
+          <div class="meta" id="documentMeta"></div>
         </div>
-        <div class="pane" id="pane-intl">
-          <div id="intlSections"></div>
-          <div class="src" id="intlSrc"></div>
+        <div class="pb">
+          <div class="doc-section">
+            <h4>Краткая выжимка</h4>
+            <div class="body" id="documentSummary"></div>
+          </div>
+          <div id="documentSections"></div>
+          <div class="disc" id="documentDisclaimer"></div>
+          <div class="qa-box">
+            <h4 id="documentQuestionHeading">Вопрос по документу</h4>
+            <textarea id="documentQuestion" placeholder="Например: какой показатель указан на второй странице?"></textarea>
+            <div class="doc-actions">
+              <button class="btn" id="documentQuestionBtn" type="button" onclick="askDocumentQuestion()">Найти в документе</button>
+              <button class="btn danger" type="button" onclick="deleteDocumentSession()">Удалить сессию</button>
+            </div>
+            <div class="status" id="documentQuestionStatus"></div>
+            <div class="err" id="documentQuestionError"></div>
+            <div id="documentAnswer" class="doc-section hidden" style="margin-top:12px"></div>
+          </div>
         </div>
-        <div class="learning" id="learning" style="display:none"></div>
-        <div class="disc" id="disc"></div>
       </div>
     </div>
   </section>
@@ -147,6 +230,36 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 <script>
 const API = '/api/ai';
 let healthState = { llm_mode: 'mock', keys_ready: false };
+let documentSessionId = null;
+let documentSessionKind = 'medical';
+
+function setWorkspace(name){
+  const documentMode = name === 'document';
+  document.getElementById('clinicalTool').classList.toggle('hidden', documentMode);
+  document.getElementById('documentTool').classList.toggle('hidden', !documentMode);
+  document.getElementById('clinicalOutput').classList.toggle('hidden', documentMode);
+  document.getElementById('documentOutput').classList.toggle('hidden', !documentMode);
+  document.getElementById('workspaceClinical').classList.toggle('active', !documentMode);
+  document.getElementById('workspaceDocument').classList.toggle('active', documentMode);
+}
+
+function updateDocumentMode(){
+  const kind = document.getElementById('documentKind').value;
+  const insurance = kind === 'insurance';
+  document.getElementById('documentHeading').textContent = insurance
+    ? 'Разбор страхового договора'
+    : 'Разбор медицинского PDF';
+  document.getElementById('documentIntro').textContent = insurance
+    ? 'Vitalis находит тип страховки, покрытие, исключения и лимиты. Если покрытия нет в PDF, поиск ограничивается официальным сайтом распознанной страховой компании.'
+    : 'Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.';
+  document.getElementById('insuranceSearchOption').classList.toggle('hidden', !insurance);
+  document.getElementById('documentQuestion').placeholder = insurance
+    ? 'Например: какой это тип страховки и что входит в покрытие?'
+    : 'Например: какой показатель указан на второй странице?';
+  document.getElementById('documentQuestionHeading').textContent = insurance
+    ? 'Вопрос по договору и официальным материалам'
+    : 'Вопрос по документу';
+}
 
 function applyModeUi(d){
   healthState = d;
@@ -262,9 +375,10 @@ function renderSources(containerId, sources, label){
   list.forEach(s=>{
     const stale = s.stale ? '<span class="stale">устарел &gt;5 лет</span>' : '';
     const year = s.year ? ` (${s.year})` : '';
-    if(s.ref && String(s.ref).startsWith('http')){
+    const sourceUrl = safeExternalUrl(s.ref);
+    if(sourceUrl){
       const a = document.createElement('a');
-      a.href = s.ref; a.target = '_blank'; a.rel = 'noopener';
+      a.href = sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}`;
       src.appendChild(a);
     } else {
@@ -286,7 +400,9 @@ function renderLearning(learning){
   el.appendChild(note);
   candidates.forEach(c=>{
     const a=document.createElement('a');
-    a.href=c.url; a.target='_blank'; a.rel='noopener';
+    const sourceUrl = safeExternalUrl(c.url);
+    if(!sourceUrl) return;
+    a.href=sourceUrl; a.target='_blank'; a.rel='noopener noreferrer';
     a.textContent=(c.title||c.url)+' · needs_review';
     el.appendChild(a);
   });
@@ -370,6 +486,256 @@ async function ask(){
   }
 }
 
+function appendDocSection(container, title, items){
+  if(!items || !items.length) return;
+  const section = document.createElement('div');
+  section.className = 'doc-section';
+  const heading = document.createElement('h4');
+  heading.textContent = title;
+  section.appendChild(heading);
+  const list = document.createElement('ul');
+  items.forEach(item=>{
+    const li = document.createElement('li');
+    li.textContent = item.text || String(item);
+    if(item.page && item.source_quote){
+      const source = document.createElement('small');
+      source.textContent = `Стр. ${item.page}: «${item.source_quote}»`;
+      li.appendChild(source);
+    }
+    list.appendChild(li);
+  });
+  section.appendChild(list);
+  container.appendChild(section);
+}
+
+function appendTextSection(container, title, items){
+  if(!items || !items.length) return;
+  appendDocSection(container, title, items.map(text=>({text})));
+}
+
+function safeExternalUrl(value){
+  try{
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.href : null;
+  }catch{
+    return null;
+  }
+}
+
+function appendOfficialSources(container, lookup){
+  if(!lookup) return;
+  if(lookup.warning) appendTextSection(container, 'Проверка официального сайта', [lookup.warning]);
+  if(!lookup.sources || !lookup.sources.length) return;
+  const section = document.createElement('div');
+  section.className = 'doc-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Официальный сайт страховщика · дополнительная справка';
+  section.appendChild(heading);
+  const list = document.createElement('ul');
+  lookup.sources.forEach(source=>{
+    const li = document.createElement('li');
+    const url = safeExternalUrl(source.url);
+    if(url){
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = source.title || source.domain;
+      li.appendChild(link);
+    }else{
+      li.textContent = source.title || source.domain;
+    }
+    const evidence = source.evidence_excerpt || source.snippet;
+    if(evidence){
+      const note = document.createElement('small');
+      note.textContent = evidence;
+      li.appendChild(note);
+    }
+    list.appendChild(li);
+  });
+  section.appendChild(list);
+  container.appendChild(section);
+}
+
+function renderDocument(data){
+  documentSessionId = data.session_id;
+  documentSessionKind = data.document_kind || 'medical';
+  document.getElementById('documentEmpty').style.display = 'none';
+  document.getElementById('documentCard').style.display = 'block';
+  document.getElementById('documentType').textContent = data.analysis.document_type || 'Документ';
+  document.getElementById('documentExpiry').textContent =
+    `Временная сессия до ${new Date(data.expires_at).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+  document.getElementById('documentSummary').textContent = data.analysis.summary || '';
+  document.getElementById('documentDisclaimer').textContent = data.disclaimer || '';
+
+  const meta = document.getElementById('documentMeta');
+  meta.innerHTML = '';
+  const kindLabel = documentSessionKind === 'insurance' ? 'страхование' : 'медицина';
+  [`${data.pages} стр.`, `${data.character_count} зн.`, kindLabel, `режим ${data.llm_mode}`].forEach(label=>{
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = label;
+    meta.appendChild(chip);
+  });
+
+  const sections = document.getElementById('documentSections');
+  sections.innerHTML = '';
+  if(documentSessionKind === 'insurance'){
+    const identity = [];
+    if(data.analysis.insurer_name) identity.push(`Страховщик: ${data.analysis.insurer_name}`);
+    if(data.analysis.insurance_type) identity.push(`Тип: ${data.analysis.insurance_type}`);
+    if(data.analysis.policy_name) identity.push(`Программа: ${data.analysis.policy_name}`);
+    appendTextSection(sections, 'Определение договора', identity);
+    appendDocSection(sections, 'Что входит в страховое покрытие', data.analysis.coverage);
+    appendDocSection(sections, 'Исключения', data.analysis.exclusions);
+    appendDocSection(sections, 'Лимиты и страховые суммы', data.analysis.limits);
+    appendDocSection(sections, 'Франшиза', data.analysis.deductibles);
+    appendDocSection(sections, 'Срок действия', data.analysis.validity);
+    appendDocSection(sections, 'Что делать при страховом случае', data.analysis.claim_procedure);
+    appendDocSection(sections, 'Контакты из договора', data.analysis.contacts);
+    appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
+    appendTextSection(sections, 'Вопросы страховой компании', data.analysis.questions_for_insurer);
+    appendOfficialSources(sections, data.insurance_lookup);
+  }else{
+    appendDocSection(sections, 'Диагнозы и формулировки документа', data.analysis.diagnoses);
+    appendDocSection(sections, 'Показатели', data.analysis.measurements);
+    appendDocSection(sections, 'Лекарства и дозировки — только как факты документа', data.analysis.medications);
+    appendDocSection(sections, 'Значимые сведения', data.analysis.findings);
+    appendDocSection(sections, 'Противоречия', data.analysis.contradictions);
+    appendDocSection(sections, 'Явно указанные тревожные признаки', data.analysis.red_flags);
+    appendTextSection(sections, 'Недостающие сведения', data.analysis.missing_information);
+    appendTextSection(sections, 'Вопросы лечащему врачу', data.analysis.questions_for_doctor);
+  }
+  appendTextSection(sections, 'Ограничения', data.analysis.limitations);
+
+  const privacy = [];
+  privacy.push(`Автоматически скрыто фрагментов: ${data.pii.total_replacements}`);
+  if(data.pii.review_required) privacy.push('Нужна ручная проверка обезличивания; внешний AI заблокирован.');
+  if(data.security.prompt_injection_detected) privacy.push('Обнаружены инструкции внутри PDF; внешний AI заблокирован.');
+  appendTextSection(sections, 'Конфиденциальность и безопасность', privacy);
+
+  document.getElementById('documentAnswer').classList.add('hidden');
+  document.getElementById('documentAnswer').textContent = '';
+  document.getElementById('documentQuestionStatus').textContent = '';
+  document.getElementById('documentQuestionError').textContent = '';
+}
+
+async function analyzeDocument(){
+  const fileInput = document.getElementById('documentFile');
+  const consent = document.getElementById('documentConsent');
+  const error = document.getElementById('documentError');
+  const status = document.getElementById('documentStatus');
+  const button = document.getElementById('documentAnalyzeBtn');
+  error.textContent = '';
+  if(!fileInput.files.length){ error.textContent = 'Выберите PDF.'; return; }
+  if(!consent.checked){ error.textContent = 'Нужно подтвердить, что документ синтетический или обезличенный.'; return; }
+  const form = new FormData();
+  form.append('file', fileInput.files[0]);
+  form.append('confirmed_deidentified', 'true');
+  const kind = document.getElementById('documentKind').value;
+  form.append('document_kind', kind);
+  form.append(
+    'search_official_sources',
+    kind === 'insurance' && document.getElementById('insuranceOfficialSearch').checked ? 'true' : 'false',
+  );
+  button.disabled = true;
+  status.textContent = kind === 'insurance'
+    ? 'Проверка PDF → обезличивание → договор → официальный сайт при нехватке данных…'
+    : 'Проверка PDF → извлечение → обезличивание → анализ…';
+  try{
+    const response = await fetch(API + '/documents/analyze', {method:'POST', body:form});
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.detail || data.error || 'Не удалось разобрать PDF');
+    renderDocument(data);
+    status.textContent = `Готово · ${data.pages} стр. · режим ${data.llm_mode}`;
+  }catch(e){
+    error.textContent = e.message || String(e);
+    status.textContent = 'Документ не обработан';
+  }finally{
+    button.disabled = false;
+  }
+}
+
+async function askDocumentQuestion(){
+  const question = document.getElementById('documentQuestion').value.trim();
+  const error = document.getElementById('documentQuestionError');
+  const status = document.getElementById('documentQuestionStatus');
+  const button = document.getElementById('documentQuestionBtn');
+  error.textContent = '';
+  if(!documentSessionId){ error.textContent = 'Сначала загрузите документ.'; return; }
+  if(question.length < 3){ error.textContent = 'Введите вопрос по документу.'; return; }
+  button.disabled = true;
+  status.textContent = documentSessionKind === 'insurance'
+    ? 'Сначала поиск в договоре, затем — в уже проверенных материалах страховщика…'
+    : 'Поиск ответа только в документе…';
+  try{
+    const response = await fetch(`${API}/documents/${encodeURIComponent(documentSessionId)}/questions`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question, use_official_web: documentSessionKind === 'insurance'}),
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.detail || data.error || 'Не удалось ответить');
+    const answer = document.getElementById('documentAnswer');
+    answer.innerHTML = '';
+    const heading = document.createElement('h4');
+    heading.textContent = 'Ответ по документу';
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = data.answer;
+    answer.appendChild(heading);
+    answer.appendChild(body);
+    if(data.evidence && data.evidence.length){
+      const list = document.createElement('ul');
+      data.evidence.forEach(item=>{
+        const li = document.createElement('li');
+        li.textContent = `Стр. ${item.page}: «${item.source_quote}»`;
+        list.appendChild(li);
+      });
+      answer.appendChild(list);
+    }
+    if(data.official_sources && data.official_sources.length){
+      appendOfficialSources(answer, {
+        sources: data.official_sources,
+        warning: 'Это общая справка с официального сайта; приоритет имеет ваш договор и указанная в нём редакция правил.',
+      });
+    }
+    if(data.limitations && data.limitations.length){
+      const note = document.createElement('small');
+      note.textContent = data.limitations.join(' ');
+      answer.appendChild(note);
+    }
+    answer.classList.remove('hidden');
+    status.textContent = `Готово · режим ${data.llm_mode}`;
+  }catch(e){
+    error.textContent = e.message || String(e);
+    status.textContent = 'Ошибка ответа';
+  }finally{
+    button.disabled = false;
+  }
+}
+
+async function deleteDocumentSession(){
+  if(documentSessionId){
+    try{
+      const response = await fetch(`${API}/documents/${encodeURIComponent(documentSessionId)}`, {method:'DELETE'});
+      const data = await response.json();
+      if(!response.ok || !data.ok) throw new Error(data.detail || data.error || 'Удаление не подтверждено');
+    }catch(e){
+      document.getElementById('documentQuestionError').textContent = e.message || String(e);
+      document.getElementById('documentStatus').textContent = 'Не удалось подтвердить удаление сессии';
+      return;
+    }
+  }
+  documentSessionId = null;
+  documentSessionKind = document.getElementById('documentKind').value;
+  document.getElementById('documentCard').style.display = 'none';
+  document.getElementById('documentEmpty').style.display = 'block';
+  document.getElementById('documentStatus').textContent = 'Временная сессия удалена или уже истекла';
+  document.getElementById('documentQuestion').value = '';
+}
+
+updateDocumentMode();
 refreshHealth();
 </script>
 </body>
