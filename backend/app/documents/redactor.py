@@ -6,6 +6,13 @@ from collections import Counter
 from app.documents.models import DocumentPage, PiiReport
 
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "labelled_identifier_en",
+        re.compile(
+            r"(?im)^\s*(?:patient(?:\s+name)?|full\s+name|insured(?:\s+person)?|policyholder|beneficiary|"
+            r"address|date\s+of\s+birth|dob|passport(?:\s+number)?|policy\s+(?:number|no\.?|#)|claim\s+(?:number|no\.?|#))\s*:\s*[^\n]{2,200}$"
+        ),
+    ),
     ("email", re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")),
     (
         "phone",
@@ -103,7 +110,8 @@ def redact_pages(
     residual_markers = re.compile(
         r"(?i)(?:Ф\.?И\.?О\.?|паспорт|СНИЛС|полис\s+ОМС|дата\s+рождения|адрес|"
         r"страхователь|застрахованн(?:ый|ая|ое)\s+лицо|выгодоприобретатель|"
-        r"номер\s+(?:полиса|договора\s+страхования|убытка)|VIN)\s*[:№]"
+        r"номер\s+(?:полиса|договора\s+страхования|убытка)|VIN|patient|policyholder|beneficiary|"
+        r"full\s+name|address|date\s+of\s+birth|dob|passport|policy\s+number|claim\s+number)\s*[:№]"
     )
     review_required = any(residual_markers.search(page.text) for page in redacted_pages)
     warnings: list[str] = []

@@ -27,7 +27,7 @@ app.disable('x-powered-by');
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
@@ -53,8 +53,9 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 
 function withoutHopByHopHeaders(headers) {
+  const nominated = new Set(String(headers.connection || '').toLowerCase().split(',').map(value => value.trim()));
   const filtered = Object.fromEntries(
-    Object.entries(headers).filter(([name]) => !HOP_BY_HOP_HEADERS.has(name.toLowerCase()))
+    Object.entries(headers).filter(([name]) => !HOP_BY_HOP_HEADERS.has(name.toLowerCase()) && !nominated.has(name.toLowerCase()))
   );
   delete filtered.authorization;
   delete filtered.cookie;
@@ -63,6 +64,7 @@ function withoutHopByHopHeaders(headers) {
 
 // Потоковый прокси стоит до json-parser: multipart и JSON передаются в FastAPI без буферизации.
 app.use('/api/ai', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   const transport = pythonTarget.protocol === 'https:' ? https : http;
   const basePath = pythonTarget.pathname.replace(/\/$/, '');
   const requestPath = req.url.startsWith('/') ? req.url : `/${req.url}`;
@@ -81,13 +83,16 @@ app.use('/api/ai', (req, res) => {
     (proxyRes) => {
       res.writeHead(
         proxyRes.statusCode || 502,
-        withoutHopByHopHeaders(proxyRes.headers)
+        { ...withoutHopByHopHeaders(proxyRes.headers), 'cache-control': 'no-store' }
       );
+      proxyRes.on('error', () => res.destroy());
       proxyRes.pipe(res);
     }
   );
 
-  proxyReq.setTimeout(65_000, () => {
+  // Search plus two sequential model calls may legitimately exceed one minute.
+  const deadline = setTimeout(() => proxyReq.destroy(new Error('Python API deadline')), 240_000);
+  proxyReq.setTimeout(240_000, () => {
     proxyReq.destroy(new Error('Python API timeout'));
   });
   proxyReq.on('error', (err) => {
@@ -103,32 +108,42 @@ app.use('/api/ai', (req, res) => {
     }
   });
   req.on('aborted', () => proxyReq.destroy());
+  res.on('close', () => {
+    clearTimeout(deadline);
+    if (!res.writableFinished) proxyReq.destroy();
+  });
   req.pipe(proxyReq);
 });
 
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/leads', formRouter);
 
-function sendHtml(filePath, res) {
+function sendHtml(filePath, res, privatePage = false) {
   fs.readFile(filePath, 'utf8', (err, html) => {
     if (err) {
       res.status(404).send('Not found');
       return;
     }
-    res.type('html').send(injectMetrika(html));
+    if (privatePage) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    }
+    res.type('html').send(privatePage ? html : injectMetrika(html));
   });
 }
 
 app.get('/', (_req, res) => sendHtml(path.join(PUBLIC_DIR, 'index.html'), res));
-app.get('/app', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res));
-app.get('/app/', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res));
+app.get('/app', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res, true));
+app.get('/app/', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res, true));
 
 app.use('/assets', express.static(path.join(WEB_DIR, 'assets')));
 app.use(express.static(PUBLIC_DIR));
 
-app.listen(PORT, () => {
+if (require.main === module) app.listen(PORT, () => {
   console.log(`Vitalis Node: http://localhost:${PORT}`);
   console.log(`Лендинг:      http://localhost:${PORT}/`);
   console.log(`Продукт:      http://localhost:${PORT}/app`);
   console.log(`AI proxy →    ${PYTHON_API_URL}`);
 });
+
+module.exports = { app };

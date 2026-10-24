@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import io
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -9,13 +7,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
-from pypdf import PdfReader
-from pypdf.errors import PdfReadError
 
 from app.config import Settings
+from app.documents.isolated_parser import extract_pdf_isolated
 from app.documents.models import (
     DocumentPage,
     InsuranceAnalysis,
@@ -23,7 +20,7 @@ from app.documents.models import (
     OfficialSourceEvidence,
 )
 from app.documents.security import scan_untrusted_text
-from app.rag.web_search import provider_search
+from app.rag.safe_fetch import fetch_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -152,15 +149,31 @@ def _all_text(pages: tuple[DocumentPage, ...]) -> str:
 
 def detect_insurer(pages: tuple[DocumentPage, ...]) -> InsurerDefinition | None:
     text = _all_text(pages).casefold()
+    matches: list[InsurerDefinition] = []
     for insurer in INSURERS:
         for alias in insurer.aliases:
             value = alias.casefold()
             if len(value) <= 3 and value.isalnum():
                 if re.search(rf"(?<!\w){re.escape(value)}(?!\w)", text):
-                    return insurer
+                    matches.append(insurer)
+                    break
             elif value in text:
-                return insurer
-    return None
+                matches.append(insurer)
+                break
+    # Prefer the specific subsidiary over a parent-name substring, but abstain
+    # when the document mentions multiple independent insurers.
+    matches = [
+        item
+        for item in matches
+        if not any(
+            item != other
+            and any(
+                alias in longer for alias in item.aliases for longer in other.aliases
+            )
+            for other in matches
+        )
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def detect_insurance_type(pages: tuple[DocumentPage, ...]) -> str:
@@ -172,7 +185,12 @@ def detect_insurance_type(pages: tuple[DocumentPage, ...]) -> str:
 
 
 def is_official_insurer_url(url: str, domain: str) -> bool:
-    parsed = urlparse(url or "")
+    try:
+        parsed = urlparse(url or "")
+        if parsed.port not in (None, 443):
+            return False
+    except ValueError:
+        return False
     host = (parsed.hostname or "").lower().rstrip(".")
     allowed = domain.lower().rstrip(".")
     return (
@@ -182,13 +200,6 @@ def is_official_insurer_url(url: str, domain: str) -> bool:
         and parsed.username is None
         and parsed.password is None
     )
-
-
-def _pdf_text(raw: bytes, max_pages: int = 60) -> str:
-    reader = PdfReader(io.BytesIO(raw), strict=True)
-    if reader.is_encrypted:
-        return ""
-    return "\n".join((page.extract_text() or "") for page in reader.pages[:max_pages])
 
 
 def _html_text(raw: bytes, encoding: str | None = None) -> str:
@@ -265,34 +276,25 @@ async def fetch_official_excerpt(
     timeout = settings.insurance_web_timeout_seconds
     headers = {"User-Agent": "Vitalis-Insurance-Research/1.0"}
     try:
-        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-            for _ in range(4):
-                async with client.stream("GET", current) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        target = urljoin(current, response.headers.get("location", ""))
-                        if not is_official_insurer_url(target, domain):
-                            return "", None
-                        current = target
-                        continue
-                    response.raise_for_status()
-                    chunks: list[bytes] = []
-                    size = 0
-                    async for chunk in response.aiter_bytes():
-                        size += len(chunk)
-                        if size > max_bytes:
-                            return "", None
-                        chunks.append(chunk)
-                    raw = b"".join(chunks)
-                    content_type = response.headers.get("content-type", "").lower()
-                    if "pdf" in content_type or current.lower().endswith(".pdf"):
-                        text = await asyncio.to_thread(_pdf_text, raw)
-                    elif "html" in content_type or content_type.startswith("text/"):
-                        text = _html_text(raw, response.encoding)
-                    else:
-                        return "", None
-                    excerpt = select_insurance_excerpt(text, query, max_chars=6_000)
-                    return excerpt, datetime.now(UTC)
-    except (httpx.HTTPError, PdfReadError, ValueError, OSError, EOFError):
+        raw, content_type, current, encoding = await fetch_bounded(
+            url,
+            allowed=lambda target: is_official_insurer_url(target, domain),
+            max_bytes=max_bytes,
+            timeout=timeout,
+            user_agent=headers["User-Agent"],
+        )
+        if "pdf" in content_type or current.lower().split("?")[0].endswith(".pdf"):
+            parsed = await extract_pdf_isolated(
+                raw, max_pages=60, max_chars=500_000, timeout=timeout
+            )
+            text = "\n".join(page.text for page in parsed.pages)
+        elif "html" in content_type or content_type.startswith("text/"):
+            text = _html_text(raw, encoding)
+        else:
+            return "", None
+        excerpt = select_insurance_excerpt(text, query, max_chars=6_000)
+        return excerpt, datetime.now(UTC)
+    except (httpx.HTTPError, ValueError, OSError, EOFError, TimeoutError):
         return "", None
     return "", None
 
@@ -301,6 +303,13 @@ SearchProvider = Callable[[str, Settings, int], Awaitable[list[dict[str, Any]]]]
 ExcerptFetcher = Callable[
     [str, str, str, Settings], Awaitable[tuple[str, datetime | None]]
 ]
+
+
+async def provider_search(query: str, settings: Settings, max_results: int):
+    # Import lazily: web search's PDF enrichment also uses the document parser.
+    from app.rag.web_search import provider_search as search
+
+    return await search(query, settings, max_results)
 
 
 class InsuranceOfficialSearch:
@@ -399,14 +408,16 @@ class InsuranceOfficialSearch:
                     type(exc).__name__,
                 )
                 excerpt, retrieved_at = "", None
-            if excerpt:
-                report = scan_untrusted_text((DocumentPage(number=1, text=excerpt),))
-                if report.prompt_injection_detected:
-                    excerpt = ""
-                    injection_omitted = True
             title = re.sub(r"\s+", " ", str(row.get("title") or insurer.name)).strip()
             snippet = re.sub(r"\s+", " ", str(row.get("snippet") or "")).strip()
-            if not snippet and not excerpt:
+            report = scan_untrusted_text(
+                (DocumentPage(number=1, text=f"{title}\n{snippet}\n{excerpt}"),)
+            )
+            if report.prompt_injection_detected:
+                injection_omitted = True
+                continue
+            # A search snippet alone is discovery, not a checked insurer document.
+            if not excerpt:
                 continue
             sources.append(
                 OfficialSourceEvidence(

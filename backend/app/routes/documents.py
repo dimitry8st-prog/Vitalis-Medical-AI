@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 from typing import Annotated, Literal
 
-import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.config import Settings
 from app.documents.analyzer import DocumentAnalysisError, DocumentAnalyzer
 from app.documents.extractor import (
     DocumentValidationError,
-    extract_pdf,
     read_upload_limited,
     validate_upload_metadata,
 )
 from app.documents.insurance_search import InsuranceOfficialSearch
+from app.documents.isolated_parser import extract_pdf_isolated
 from app.documents.models import (
     DocumentDeleteResponse,
     DocumentQuestionRequest,
@@ -98,15 +96,10 @@ def create_documents_router(
         try:
             validate_upload_metadata(file.filename, file.content_type)
             data = await read_upload_limited(file, settings.document_max_file_bytes)
-            extracted = await asyncio.wait_for(
-                anyio.to_thread.run_sync(
-                    lambda: extract_pdf(
-                        data,
-                        max_pages=settings.document_max_pages,
-                        max_chars=settings.document_max_chars,
-                    ),
-                    abandon_on_cancel=True,
-                ),
+            extracted = await extract_pdf_isolated(
+                data,
+                max_pages=settings.document_max_pages,
+                max_chars=settings.document_max_chars,
                 timeout=settings.document_parse_timeout_seconds,
             )
         except DocumentValidationError as exc:
@@ -125,7 +118,8 @@ def create_documents_router(
         redacted_pages, pii_report = redact_pages(extracted.pages)
         security_report = scan_untrusted_text(redacted_pages)
         allow_external = (
-            not pii_report.review_required
+            confirmed_deidentified
+            and not pii_report.review_required
             and not security_report.prompt_injection_detected
         )
 
@@ -176,6 +170,8 @@ def create_documents_router(
 
     @router.get("/{session_id}", response_model=DocumentSessionResponse)
     async def get_document_session(session_id: str) -> DocumentSessionResponse:
+        if not settings.document_analysis_enabled:
+            raise HTTPException(status_code=503, detail="Модуль документов отключён.")
         item = store.get(session_id)
         if item is None:
             raise HTTPException(
@@ -189,6 +185,8 @@ def create_documents_router(
         session_id: str,
         body: DocumentQuestionRequest,
     ) -> DocumentQuestionResponse:
+        if not settings.document_analysis_enabled:
+            raise HTTPException(status_code=503, detail="Модуль документов отключён.")
         item = store.get(session_id)
         if item is None:
             raise HTTPException(

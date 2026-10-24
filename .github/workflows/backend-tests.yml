@@ -51,3 +51,5 @@ jobs:
         run: |
           node --check server/index.js
           sed -n '/<script>/,/<\/script>/p' web/app.html | sed '1d;$d' | node --check -
+      - name: Test proxy routes and cabinet privacy
+        run: node --test server/tests/*.test.js

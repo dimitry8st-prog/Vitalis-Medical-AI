@@ -1,6 +1,8 @@
 import unittest
 
 from app.llm.deepseek import DeepSeekClient
+from app.rag.document_fetch import select_relevant_excerpt
+from app.rag.source_policy import classify_international_source
 from app.rag.web_search import (
     _balanced_results,
     _build_queries,
@@ -9,8 +11,6 @@ from app.rag.web_search import (
     _extract_focus,
     _rf_search_focus,
 )
-from app.rag.source_policy import classify_international_source
-from app.rag.document_fetch import select_relevant_excerpt
 from app.services.ask import AskService
 
 

@@ -4,7 +4,18 @@ from urllib.parse import urlparse
 
 
 def _host(url: str) -> str:
-    return (urlparse(url or "").hostname or "").lower()
+    try:
+        parsed = urlparse(url or "")
+        if (
+            parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.port not in (None, 443)
+        ):
+            return ""
+        return (parsed.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
 
 
 def _matches(host: str, domain: str) -> bool:
@@ -25,6 +36,10 @@ INTERNATIONAL_SOURCES: tuple[tuple[str, str, str], ...] = (
     ("ahajournals.org", "US", "official_guideline"),
     ("heart.org", "US", "official_guideline"),
     ("aan.com", "US", "official_guideline"),
+    ("acc.org", "US", "official_guideline"),
+    ("cns.org", "US", "official_guideline"),
+    ("nccn.org", "US", "official_guideline"),
+    ("thoracic.org", "US", "official_guideline"),
     ("guidelinecentral.com", "US", "secondary_guideline_index"),
     ("cdc.gov", "US", "official_guideline"),
     ("nih.gov", "US", "official_guideline"),
@@ -60,7 +75,8 @@ def classify_international_source(url: str) -> dict[str, str | bool]:
             return {
                 "source_tier": tier,
                 "jurisdiction": jurisdiction,
-                "official_domain": tier in {
+                "official_domain": tier
+                in {
                     "official_guideline",
                     "regulator_or_formulary",
                 },

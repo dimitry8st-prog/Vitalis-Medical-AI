@@ -73,14 +73,23 @@ def _contains_catalog_risk(reader: PdfReader) -> bool:
             annotation = _resolve(annotation_ref)
             if not hasattr(annotation, "get"):
                 continue
+            if (
+                annotation.get("/Subtype") in {"/FileAttachment", "/RichMedia"}
+                or annotation.get("/AA") is not None
+            ):
+                return True
             for action_key in ("/A", "/AA"):
                 action = _resolve(annotation.get(action_key))
-                if hasattr(action, "get") and action.get("/S") in {
-                    "/JavaScript",
-                    "/Launch",
-                    "/SubmitForm",
-                    "/ImportData",
-                }:
+                if hasattr(action, "get") and (
+                    action.get("/Next") is not None
+                    or action.get("/S")
+                    in {
+                        "/JavaScript",
+                        "/Launch",
+                        "/SubmitForm",
+                        "/ImportData",
+                    }
+                ):
                     return True
     return False
 

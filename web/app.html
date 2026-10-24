@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vitalis — там где понимание становится практикой, а знания — стандартом</title>
 <meta name="description" content="Система Vitalis — там где понимание становится практикой, а знания — стандартом. Клинические рекомендации: РФ и международные.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
   --navy:#0A1628;--navy-mid:#0F1D32;--slate:#64748B;--slate-light:#94A3B8;
@@ -377,9 +375,10 @@ function renderSources(containerId, sources, label){
   list.forEach(s=>{
     const stale = s.stale ? '<span class="stale">устарел &gt;5 лет</span>' : '';
     const year = s.year ? ` (${s.year})` : '';
-    if(s.ref && String(s.ref).startsWith('http')){
+    const sourceUrl = safeExternalUrl(s.ref);
+    if(sourceUrl){
       const a = document.createElement('a');
-      a.href = s.ref; a.target = '_blank'; a.rel = 'noopener';
+      a.href = sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}`;
       src.appendChild(a);
     } else {
@@ -401,7 +400,9 @@ function renderLearning(learning){
   el.appendChild(note);
   candidates.forEach(c=>{
     const a=document.createElement('a');
-    a.href=c.url; a.target='_blank'; a.rel='noopener';
+    const sourceUrl = safeExternalUrl(c.url);
+    if(!sourceUrl) return;
+    a.href=sourceUrl; a.target='_blank'; a.rel='noopener noreferrer';
     a.textContent=(c.title||c.url)+' · needs_review';
     el.appendChild(a);
   });

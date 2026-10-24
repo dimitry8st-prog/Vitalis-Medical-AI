@@ -22,6 +22,8 @@ from app.documents.prompts import (
     INSURANCE_QUESTION_SYSTEM_PROMPT,
     QUESTION_SYSTEM_PROMPT,
 )
+from app.documents.redactor import redact_pages
+from app.documents.security import scan_untrusted_text
 from app.llm.deepseek import DeepSeekClient
 
 
@@ -129,7 +131,8 @@ def _verified_items(
     for item in items:
         quote = _normalise_quote(item.source_quote)
         if quote and quote in page_text.get(item.page, ""):
-            accepted.append(item)
+            # A real quote cannot validate a different, model-invented clinical fact.
+            accepted.append(item.model_copy(update={"text": item.source_quote}))
         else:
             rejected += 1
     return accepted, rejected
@@ -332,6 +335,8 @@ def _offline_insurance_analysis(
             if not clean:
                 continue
             for field_name, category, pattern in _INSURANCE_SECTIONS:
+                if field_name == "coverage" and _INSURANCE_SECTIONS[1][2].search(clean):
+                    continue
                 if pattern.search(clean) and len(extracted[field_name]) < 12:
                     extracted[field_name].append(
                         EvidenceItem(
@@ -404,12 +409,12 @@ def _local_question_evidence(
         low = question.casefold()
         if "тип" in low or "вид" in low:
             tokens.update({"дмс", "омс", "осаго", "каско", "страхован"})
-        if "входит" in low or "покры" in low or "включ" in low:
-            tokens.update({"покры", "включ", "страхов", "риск"})
-            intent_pattern = _INSURANCE_SECTIONS[0][2]
-        elif "исключ" in low or "не покры" in low:
+        if "исключ" in low or "не покры" in low:
             tokens.update({"исключ", "покры", "страхов"})
             intent_pattern = _INSURANCE_SECTIONS[1][2]
+        elif "входит" in low or "покры" in low or "включ" in low:
+            tokens.update({"покры", "включ", "страхов", "риск"})
+            intent_pattern = _INSURANCE_SECTIONS[0][2]
         elif "лимит" in low or "страхов" in low and "сумм" in low:
             tokens.update({"лимит", "сумм", "выплат"})
             intent_pattern = _INSURANCE_SECTIONS[2][2]
@@ -426,6 +431,10 @@ def _local_question_evidence(
             if not clean:
                 continue
             if intent_pattern is not None and not intent_pattern.search(clean):
+                continue
+            if intent_pattern is _INSURANCE_SECTIONS[0][2] and _INSURANCE_SECTIONS[1][
+                2
+            ].search(clean):
                 continue
             score = sum(token in clean.casefold() for token in tokens)
             if score:
@@ -464,7 +473,7 @@ class DocumentAnalyzer:
 
     @property
     def ready(self) -> bool:
-        return self.settings.document_external_llm_enabled and self.client.ready
+        return self.settings.document_external_llm_ready and self.client.ready
 
     async def analyze(
         self,
@@ -473,6 +482,12 @@ class DocumentAnalyzer:
         allow_external: bool = True,
         document_kind: Literal["medical", "insurance"] = "medical",
     ) -> tuple[AnalysisPayload, Literal["mock", "live", "disabled"]]:
+        pages, pii = redact_pages(pages)
+        allow_external = (
+            allow_external
+            and not pii.review_required
+            and not scan_untrusted_text(pages).prompt_injection_detected
+        )
         offline = (
             _offline_insurance_analysis
             if document_kind == "insurance"
@@ -523,6 +538,20 @@ class DocumentAnalyzer:
         document_kind: Literal["medical", "insurance"] = "medical",
         official_sources: list[OfficialSourceEvidence] | None = None,
     ) -> tuple[QuestionPayload, Literal["mock", "live", "disabled"]]:
+        # Follow-up text is a fresh untrusted input, even for an approved PDF session.
+        pages, page_pii = redact_pages(pages)
+        question_pages, question_pii = redact_pages(
+            (DocumentPage(number=1, text=question),)
+        )
+        question = question_pages[0].text
+        allow_external = (
+            allow_external
+            and not page_pii.review_required
+            and not question_pii.review_required
+            and not scan_untrusted_text(
+                (*pages, *question_pages)
+            ).prompt_injection_detected
+        )
         official_sources = official_sources or []
         if document_kind == "medical" and _DIRECT_MEDICAL_ACTION.search(question):
             return (

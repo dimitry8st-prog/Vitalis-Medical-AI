@@ -11,6 +11,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 
 from app.config import Settings
+from app.documents.models import DocumentPage
+from app.documents.security import scan_untrusted_text
 from app.rag.document_fetch import enrich_primary_documents
 from app.rag.source_policy import (
     classify_international_source,
@@ -79,6 +81,12 @@ async def web_search(
 
     for item in all_hits:
         item["relevance_score"] = _score_hit(item, f"{focus} {en_focus}")
+    all_hits = [
+        item for item in all_hits
+        if not scan_untrusted_text((DocumentPage(
+            number=1, text=f"{item.get('title', '')}\n{item.get('snippet', '')}"
+        ),)).prompt_injection_detected
+    ]
     selected = _balanced_results(all_hits, scope, max_results)
     if scope in ("intl", "both") and settings.web_fetch_full_text:
         selected = await enrich_primary_documents(
@@ -123,6 +131,12 @@ def _merge(
         if item.get("provider") == "error":
             continue
         item = dict(item)
+        try:
+            parsed = urlparse(str(item.get("url") or ""))
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+                continue
+        except ValueError:
+            continue
         item["lang"] = lang
         item["query_kind"] = kind
         if lang == "ru":
@@ -597,7 +611,8 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         (2, ("sechenov.ru", "rsmu.ru", "nmicr.ru", "nmicrk.ru", "oncology.ru", "almazovcentre.ru", "gnicpm.ru", "mediasphera.ru", "journals.eco-vector.com", "rnmot.ru", "neurology.ru", "elibrary.ru", "elpub.ru", "orscience.ru", "ter-arkhiv.ru", "rehabrus.ru", "medpoint.pro", "diseases.medelement.com", "evidence-neurology.ru", "consultant.ru", "garant.ru")),
     )
     for points, domains in tiers:
-        if any(domain in url for domain in domains):
+        host = (urlparse(url).hostname or "").lower()
+        if any(host == domain or host.endswith(f".{domain}") for domain in domains):
             authority = points
             break
     kind_bonus = {
@@ -642,7 +657,11 @@ def _is_international_url(url: str) -> bool:
         "ema.europa.eu", "dailymed.nlm.nih.gov", "strokebestpractices.ca",
         "strokefoundation.org.au", "braintrauma.org",
     )
-    return any(domain in (url or "").lower() for domain in domains)
+    try:
+        host = (urlparse(url or "").hostname or "").lower()
+    except ValueError:
+        return False
+    return any(host == domain or host.endswith(f".{domain}") for domain in domains)
 
 
 def _select_with_kind_quotas(

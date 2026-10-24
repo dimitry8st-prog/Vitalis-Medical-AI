@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import re
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Any
 
-import httpx
-from pypdf import PdfReader
-
+from app.documents.isolated_parser import extract_pdf_isolated
+from app.documents.models import DocumentPage
+from app.documents.security import scan_untrusted_text
+from app.rag.safe_fetch import fetch_bounded
 from app.rag.source_policy import is_primary_international_source
 
 
@@ -40,18 +40,18 @@ def _html_to_text(raw: str) -> str:
     return "\n".join(parser.parts)
 
 
-def _pdf_to_text(raw: bytes, max_pages: int = 80) -> str:
-    reader = PdfReader(io.BytesIO(raw))
-    pages: list[str] = []
-    for page in reader.pages[:max_pages]:
-        pages.append(page.extract_text() or "")
-    return "\n".join(pages)
-
-
 def _query_terms(query: str) -> list[str]:
     stop = {
-        "международные", "рекомендации", "актуальные", "лечение", "ведение",
-        "после", "пациент", "guideline", "clinical", "recommendation",
+        "международные",
+        "рекомендации",
+        "актуальные",
+        "лечение",
+        "ведение",
+        "после",
+        "пациент",
+        "guideline",
+        "clinical",
+        "recommendation",
     }
     terms = [
         token.lower()
@@ -64,12 +64,31 @@ def _query_terms(query: str) -> list[str]:
 def select_relevant_excerpt(text: str, query: str, max_chars: int = 6000) -> str:
     """Select evidence-like passages without treating retrieved text as instructions."""
     clean = re.sub(r"[ \t]+", " ", text or "")
-    blocks = [block.strip() for block in re.split(r"\n{2,}|(?<=[.!?])\s+", clean) if block.strip()]
+    blocks = [
+        block.strip()
+        for block in re.split(r"\n{2,}|(?<=[.!?])\s+", clean)
+        if block.strip()
+    ]
     terms = _query_terms(query)
     clinical_terms = (
-        "recommend", "guideline", "dose", "dosage", "indication", "contraindication",
-        "rehabilitation", "surgery", "treatment", "therapy", "evidence", "grade",
-        "рекоменду", "доз", "показан", "противопоказ", "реабилитац", "хирург",
+        "recommend",
+        "guideline",
+        "dose",
+        "dosage",
+        "indication",
+        "contraindication",
+        "rehabilitation",
+        "surgery",
+        "treatment",
+        "therapy",
+        "evidence",
+        "grade",
+        "рекоменду",
+        "доз",
+        "показан",
+        "противопоказ",
+        "реабилитац",
+        "хирург",
     )
 
     ranked: list[tuple[int, int, str]] = []
@@ -112,35 +131,45 @@ async def enrich_primary_documents(
         item["full_text_checked"] = False
         url = str(item.get("url") or "")
         try:
-            async with httpx.AsyncClient(
+            raw, content_type, final_url, encoding = await fetch_bounded(
+                url,
+                allowed=is_primary_international_source,
+                max_bytes=max_bytes,
                 timeout=15,
-                follow_redirects=True,
-                headers={"User-Agent": "Vitalis-Medical-Evidence/1.0"},
-            ) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                raw = response.content
-                if len(raw) > max_bytes:
-                    raise ValueError("document exceeds configured size limit")
-                content_type = response.headers.get("content-type", "").lower()
-                if "pdf" in content_type or url.lower().endswith(".pdf"):
-                    text = await asyncio.to_thread(_pdf_to_text, raw)
-                    item["retrieved_format"] = "pdf"
-                else:
-                    text = _html_to_text(response.text)
-                    item["retrieved_format"] = "html"
-                excerpt = select_relevant_excerpt(text, query)
-                if excerpt:
-                    item["evidence_excerpt"] = excerpt
-                    item["full_text_checked"] = True
-                    item["retrieved_at"] = datetime.now(timezone.utc).isoformat()
+                user_agent="Vitalis-Medical-Evidence/1.0",
+            )
+            if "pdf" in content_type or final_url.lower().split("?")[0].endswith(
+                ".pdf"
+            ):
+                parsed = await extract_pdf_isolated(
+                    raw, max_pages=80, max_chars=500_000
+                )
+                text = "\n".join(page.text for page in parsed.pages)
+                item["retrieved_format"] = "pdf"
+            elif "html" in content_type or content_type.startswith("text/"):
+                text = _html_to_text(raw.decode(encoding or "utf-8", errors="replace"))
+                item["retrieved_format"] = "html"
+            else:
+                raise ValueError("unsupported evidence document format")
+            excerpt = select_relevant_excerpt(text, query)
+            if scan_untrusted_text(
+                (DocumentPage(number=1, text=excerpt),)
+            ).prompt_injection_detected:
+                raise ValueError("untrusted instructions in evidence")
+            if excerpt:
+                item["evidence_excerpt"] = excerpt
+                item["full_text_checked"] = True
+                item["retrieved_url"] = final_url
+                item["retrieved_at"] = datetime.now(timezone.utc).isoformat()
         except Exception as exc:
             item["fetch_error"] = type(exc).__name__
         return index, item
 
     if not candidates:
         return hits
-    updates = await asyncio.gather(*(fetch_one(index, hit) for index, hit in candidates))
+    updates = await asyncio.gather(
+        *(fetch_one(index, hit) for index, hit in candidates)
+    )
     enriched = [dict(hit) for hit in hits]
     for index, item in updates:
         enriched[index] = item
