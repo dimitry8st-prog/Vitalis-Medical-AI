@@ -9,7 +9,11 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=4000)
     mode: Literal["rf", "intl", "both"] = "both"
     use_web: bool = True
-    mkb: str | None = None
+    mkb: str | None = Field(
+        default=None,
+        max_length=8,
+        pattern=r"^[A-Za-zА-Яа-яЁё][0-9]{2}(?:\.[0-9A-Za-zА-Яа-яЁё]{1,4})?$",
+    )
 
 
 class AskResponse(BaseModel):
@@ -23,6 +27,8 @@ class AskResponse(BaseModel):
     web: list[dict[str, Any]] = []
     search: dict[str, Any] | None = None
     learning: dict[str, Any] | None = None
+    privacy: dict[str, Any] | None = None
+    citation_validation: dict[str, Any] | None = None
     disclaimer: str = "Информация носит справочный характер. Решение принимает лечащий врач."
 
 

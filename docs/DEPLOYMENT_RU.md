@@ -6,6 +6,12 @@ Private pilot: https://vitalis.st8dom.ru/app. HTTPS and HTTP Basic authenticatio
 
 Application baseline: `9cfb784403e8dead895fbae3c6be6cb84fefbe3c` (main). This documentation/configuration commit does not change application logic, prompts, or the INT branch. The existing application still contains both region choices; deployment does not enforce RU-only selection.
 
+This is a historical deployment record, not the current release state. The audited
+international search and document workflows were merged later in PR #12 at `d703fb5`;
+as of 1 November 2026 this repository contains further completion work, but there is no
+record that either revision has been deployed to the VPS. Verify the running image/commit
+before any acceptance claim and keep the old instance as the rollback target.
+
 Environment observed during the operator-guided session: Timeweb VPS, Ubuntu 26.04, Docker 29.7.2, Compose 5.5.0, Caddy 2.6.2; approximately 889 MiB RAM and a 1 GiB swap file. Checkout: `/opt/vitalis-ru`. Public DNS is managed at Beget, not in the empty Timeweb domains list.
 
 ## Layout and configuration
