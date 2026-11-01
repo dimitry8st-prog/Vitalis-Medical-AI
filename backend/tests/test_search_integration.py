@@ -4,8 +4,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from pydantic import ValidationError
+
 from app.config import Settings
 from app.rag.vault import VaultRAG
+from app.schemas import AskRequest
 from app.services.ask import AskService
 
 
@@ -83,6 +86,68 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         search.assert_not_called()
         self.assertFalse(self.calls)
         self.assertEqual(result["search"]["routed"], "faq")
+
+    async def test_clinical_pii_is_redacted_before_web_and_model(self):
+        rows = [
+            {
+                "url": "https://cr.minzdrav.gov.ru/example",
+                "title": "Synthetic guideline",
+                "lang": "ru",
+                "year": 2026,
+                "snippet": "Synthetic evidence",
+            }
+        ]
+        with patch("app.services.ask.web_search", return_value=rows) as search:
+            result = await self.service.ask(
+                "Лечение гипертонии, email patient@example.org",
+                mode="rf",
+            )
+
+        external_query = search.call_args.args[0]
+        self.assertNotIn("patient@example.org", external_query)
+        self.assertIn("REDACTED_EMAIL", external_query)
+        self.assertNotIn("patient@example.org", self.calls[0][1])
+        self.assertIn("REDACTED_EMAIL", self.calls[0][1])
+        self.assertTrue(result["privacy"]["external_query_sanitized"])
+
+    async def test_residual_pii_blocks_all_external_calls(self):
+        with patch("app.services.ask.web_search", new_callable=AsyncMock) as search:
+            result = await self.service.ask(
+                "Лечение гипертонии, паспорт: неизвестный формат",
+                mode="rf",
+            )
+
+        search.assert_not_called()
+        self.assertFalse(self.calls)
+        self.assertEqual(result["search"]["routed"], "privacy_blocked")
+        self.assertTrue(result["privacy"]["external_calls_blocked"])
+
+    async def test_identifier_only_query_is_blocked_after_redaction(self):
+        with patch("app.services.ask.web_search", new_callable=AsyncMock) as search:
+            result = await self.service.ask("Email: user@example.org", mode="rf")
+
+        search.assert_not_called()
+        self.assertFalse(self.calls)
+        self.assertEqual(result["search"]["routed"], "privacy_blocked")
+
+    async def test_use_web_false_skips_search_and_marks_limited_mode(self):
+        with patch("app.services.ask.web_search", new_callable=AsyncMock) as search:
+            result = await self.service.ask(
+                "Лечение ишемического инсульта",
+                mode="rf",
+                use_web=False,
+            )
+
+        search.assert_not_called()
+        self.assertEqual(len(self.calls), 1)
+        self.assertFalse(result["search"]["web_forced"])
+        self.assertTrue(result["search"]["web_disabled"])
+        self.assertEqual(result["search"]["evidence_status"], "limited")
+
+    def test_mkb_field_accepts_code_but_rejects_free_text(self):
+        self.assertEqual(AskRequest(question="Лечение", mkb="I21.9").mkb, "I21.9")
+        with self.assertRaises(ValidationError):
+            AskRequest(question="Лечение", mkb="Иванов 123456")
 
 
 class MainApiTests(unittest.IsolatedAsyncioTestCase):

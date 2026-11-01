@@ -5,9 +5,12 @@ from datetime import datetime
 from typing import Any
 
 from app.config import Settings
+from app.documents.models import DocumentPage
+from app.documents.redactor import redact_pages
 from app.llm.deepseek import DeepSeekClient
 from app.rag.vault import VaultRAG
 from app.rag.web_search import web_search
+from app.services.citation_guard import guard_clinical_payload
 from app.services.routing import canned_answer, classify_intent, is_nonclinical
 
 DISCLAIMER = "Информация носит справочный характер. Решение принимает лечащий врач."
@@ -260,6 +263,17 @@ class AskService:
                 "disclaimer": DISCLAIMER if intent not in {"greeting", "skills", "tech", "vague", "offtopic", "unsafe"} else "",
             }
 
+        external_question, privacy = self._sanitize_external_question(question)
+        if privacy["manual_review_required"] or not self._has_meaningful_query(external_question):
+            return self._privacy_blocked_response(
+                question=question,
+                mode=mode,
+                mkb=mkb,
+                intent=intent,
+                privacy=privacy,
+                use_web=use_web,
+            )
+
         rag_raw = self.rag.search(question, k=6)
         rag_hits = self._annotate_rag_age(rag_raw)
         relevant_rag = self._filter_relevant_rag(question, rag_hits)
@@ -272,18 +286,19 @@ class AskService:
 
         web_hits: list[dict[str, Any]] = []
         web_error = None
-        try:
-            web_hits = await web_search(
-                question,
-                self.settings,
-                max_results=4,
-                bilingual=mode in ("intl", "both"),
-                freshness_extra=True,
-                scope=mode,
-            )
-        except Exception as e:
-            web_hits = []
-            web_error = f"{type(e).__name__}: {e}"
+        if use_web:
+            try:
+                web_hits = await web_search(
+                    external_question,
+                    self.settings,
+                    max_results=4,
+                    bilingual=mode in ("intl", "both"),
+                    freshness_extra=True,
+                    scope=mode,
+                )
+            except Exception as e:
+                web_hits = []
+                web_error = f"{type(e).__name__}: {e}"
 
         missing_web = self._missing_required_web(mode, web_hits)
         if missing_web and self.settings.evidence_gate_mode == "strict":
@@ -297,6 +312,7 @@ class AskService:
                 web_error=web_error,
                 missing_web=missing_web,
                 use_web=use_web,
+                privacy=privacy,
             )
 
         faq_hits = [h for h in rag_hits if "faq" in (h.get("path") or "").lower()]
@@ -313,9 +329,14 @@ class AskService:
                 any(hit.get("stale") for hit in scoped_rag) or not scoped_rag,
             )
             if lang in missing_web:
+                web_reason = (
+                    "Веб-поиск отключён по запросу пользователя."
+                    if not use_web
+                    else f"Веб-поиск не вернул обязательные источники: {lang.upper()}."
+                )
                 context += (
                     "\n\n# ОГРАНИЧЕННЫЙ РЕЖИМ ИСТОЧНИКОВ\n"
-                    f"Веб-поиск не вернул обязательные источники: {lang.upper()}. "
+                    f"{web_reason} "
                     "Начни ответ с предупреждения: «Веб-проверка источников сейчас недоступна; "
                     "ниже приведён общий справочный обзор, требующий проверки по действующим "
                     "клиническим рекомендациям». Не выдумывай ссылки, названия документов и даты. "
@@ -325,7 +346,7 @@ class AskService:
                 context += "\n\n# Справка системы (Vitalis_FAQ_Skills)\n" + "\n".join(
                     f"- {h['title']}: {h['text'][:400]}" for h in faq_hits[:2]
                 )
-            blob = self._user_prompt(question, context, mkb)
+            blob = self._user_prompt(external_question, context, mkb)
             return f"Классификация запроса: {intent} (clinical).\n" + blob
 
         rf = None
@@ -333,9 +354,21 @@ class AskService:
         if mode in ("rf", "both"):
             rf = await self.deepseek.complete(RF_SYSTEM, scoped_user_blob("ru"))
             rf = self._sanitize_model_names(rf)
+            rf = guard_clinical_payload(
+                rf,
+                web_hits=[hit for hit in web_hits if hit.get("lang") == "ru"],
+                rag_hits=self._scope_rag_hits(relevant_rag, "ru"),
+                strict=self.settings.evidence_gate_mode == "strict",
+            )
         if mode in ("intl", "both"):
             intl = await self.deepseek.complete(INTL_SYSTEM, scoped_user_blob("en"))
             intl = self._sanitize_model_names(intl)
+            intl = guard_clinical_payload(
+                intl,
+                web_hits=[hit for hit in web_hits if hit.get("lang") == "en"],
+                rag_hits=self._scope_rag_hits(relevant_rag, "en"),
+                strict=self.settings.evidence_gate_mode == "strict",
+            )
 
         card = self._build_card(question, mkb, rf, intl, relevant_rag, web_hits)
         card["intent"] = intent
@@ -351,6 +384,11 @@ class AskService:
             "rag": relevant_rag,
             "web": web_hits,
             "learning": learning,
+            "privacy": privacy,
+            "citation_validation": {
+                "rf": (rf or {}).get("citation_validation"),
+                "intl": (intl or {}).get("citation_validation"),
+            },
             "search": {
                 "intent": intent,
                 "routed": "clinical",
@@ -358,8 +396,9 @@ class AskService:
                 "rag_relevant": len(relevant_rag),
                 "rag_stale": sum(1 for h in relevant_rag if h.get("stale")),
                 "web_total": len(web_hits),
-                "web_forced": True,
-                "freshness_extra": True,
+                "web_forced": use_web,
+                "web_disabled": not use_web,
+                "freshness_extra": use_web,
                 "stale_years": STALE_YEARS,
                 "use_web_requested": use_web,
                 "web_error": web_error,
@@ -471,6 +510,7 @@ class AskService:
         web_error: str | None,
         missing_web: list[str],
         use_web: bool,
+        privacy: dict[str, Any],
     ) -> dict[str, Any]:
         names = {"ru": "российские", "en": "международные"}
         missing_label = " и ".join(names.get(code, code) for code in missing_web)
@@ -521,6 +561,7 @@ class AskService:
             "intl": payload if mode in ("intl", "both") else None,
             "rag": rag_hits,
             "web": web_hits,
+            "privacy": privacy,
             "search": {
                 "intent": intent,
                 "routed": "evidence_blocked",
@@ -528,12 +569,107 @@ class AskService:
                 "rag_relevant": len(rag_hits),
                 "rag_stale": sum(1 for hit in rag_hits if hit.get("stale")),
                 "web_total": len(web_hits),
-                "web_forced": True,
+                "web_forced": use_web,
+                "web_disabled": not use_web,
                 "web_required": True,
                 "missing_web_languages": missing_web,
                 "use_web_requested": use_web,
                 "web_error": web_error,
                 "evidence_status": "blocked",
+                "evidence_gate_mode": self.settings.evidence_gate_mode,
+            },
+            "disclaimer": DISCLAIMER,
+        }
+
+    @staticmethod
+    def _sanitize_external_question(question: str) -> tuple[str, dict[str, Any]]:
+        """Remove common identifiers before a query can leave the local boundary."""
+        pages, report = redact_pages((DocumentPage(number=1, text=question),))
+        sanitized = pages[0].text.strip()
+        return sanitized, {
+            "external_query_sanitized": report.total_replacements > 0,
+            "redaction_count": report.total_replacements,
+            "redaction_types": sorted(report.replacement_counts),
+            "manual_review_required": report.review_required,
+            "external_calls_blocked": report.review_required,
+        }
+
+    @staticmethod
+    def _has_meaningful_query(question: str) -> bool:
+        without_markers = re.sub(r"\[REDACTED_[A-Z_]+\]", " ", question)
+        without_labels = re.sub(
+            r"(?i)\b(?:e-?mail|email|phone|telephone|телефон|контакт|contact|"
+            r"фио|пациент|patient|адрес|address|паспорт|passport|полис|policy)\b",
+            " ",
+            without_markers,
+        )
+        return bool(re.search(r"[A-Za-zА-Яа-яЁё]{3,}", without_labels))
+
+    def _privacy_blocked_response(
+        self,
+        *,
+        question: str,
+        mode: str,
+        mkb: str | None,
+        intent: str,
+        privacy: dict[str, Any],
+        use_web: bool,
+    ) -> dict[str, Any]:
+        privacy = dict(privacy)
+        privacy["external_calls_blocked"] = True
+        message = (
+            "В запросе обнаружены персональные данные, которые нельзя надёжно "
+            "обезличить автоматически. Удалите ФИО, контакты, адрес, паспортные, "
+            "страховые и иные идентификаторы и повторите запрос. Внешний поиск "
+            "и модель не вызывались."
+        )
+        payload = {"provider": "vitalis", "mode": "privacy_blocked", "content": message}
+        tab = {
+            "label": "Запрос требует обезличивания",
+            "content": message,
+            "sections": [
+                {
+                    "key": "w",
+                    "title": "Персональные данные",
+                    "body": message,
+                }
+            ],
+            "sources": [],
+        }
+        card = {
+            "mkb": mkb or "—",
+            "title": "Внешняя обработка заблокирована",
+            "identity": "Система Vitalis",
+            "intent": intent,
+            "tabs": {
+                "rf": {**tab, "label": "РФ · обезличивание"},
+                "intl": {**tab, "label": "Международные · обезличивание"},
+            },
+        }
+        return {
+            "question": question,
+            "mode": mode,
+            "llm_mode": self.settings.llm_mode,
+            "card": card,
+            "rf": payload if mode in ("rf", "both") else None,
+            "intl": payload if mode in ("intl", "both") else None,
+            "rag": [],
+            "web": [],
+            "privacy": privacy,
+            "search": {
+                "intent": intent,
+                "routed": "privacy_blocked",
+                "rag_total": 0,
+                "rag_relevant": 0,
+                "rag_stale": 0,
+                "web_total": 0,
+                "web_forced": False,
+                "web_disabled": not use_web,
+                "freshness_extra": False,
+                "stale_years": STALE_YEARS,
+                "use_web_requested": use_web,
+                "evidence_status": "privacy_blocked",
+                "missing_web_languages": [],
                 "evidence_gate_mode": self.settings.evidence_gate_mode,
             },
             "disclaimer": DISCLAIMER,
