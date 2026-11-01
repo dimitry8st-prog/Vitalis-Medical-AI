@@ -5,9 +5,13 @@ import csv
 import json
 import random
 import statistics
+import time
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATASET = ROOT / "clinical_cases.json"
@@ -23,11 +27,152 @@ MIN_CATEGORY_COUNTS = {
 }
 VALID_MODES = {"rf", "intl", "both"}
 PROVIDER_NAMES = ("deepseek", "gigachat", "chatgpt", "claude", "gpt-4", "llm")
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_api_url(value: str, *, allow_remote: bool = False) -> str:
+    parts = urlsplit(value.strip())
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        raise ValueError("API URL must use http or https and include a host")
+    if parts.username or parts.password:
+        raise ValueError("credentials in API URL are forbidden")
+    if parts.query or parts.fragment:
+        raise ValueError("API URL must not contain a query or fragment")
+    is_remote = parts.hostname.lower() not in LOOPBACK_HOSTS
+    if not allow_remote and is_remote:
+        raise ValueError("remote API requires --allow-remote-api")
+    if is_remote and parts.scheme != "https":
+        raise ValueError("remote API must use https")
+    path = parts.path.rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
+def ask_endpoint(api_url: str) -> str:
+    return api_url if api_url.endswith("/ask") else f"{api_url}/ask"
+
+
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
+def post_case(
+    endpoint: str,
+    case: dict[str, Any],
+    *,
+    timeout: float,
+    opener: Any = urlopen,
+) -> tuple[int, dict[str, Any]]:
+    payload: dict[str, Any] = {
+        "question": case["question"],
+        "mode": case["mode"],
+        "use_web": case["use_web"],
+    }
+    if case.get("mkb"):
+        payload["mkb"] = case["mkb"]
+    request = Request(
+        endpoint,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Vitalis-Clinical-Eval/1.0",
+        },
+        method="POST",
+    )
+    with opener(request, timeout=timeout) as response:
+        status = int(getattr(response, "status", 200))
+        parsed = json.loads(response.read().decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError("API response must be a JSON object")
+    return status, parsed
+
+
+def collect_responses(
+    dataset: dict[str, Any],
+    output: Path,
+    *,
+    api_url: str,
+    metadata: dict[str, str],
+    timeout: float,
+    delay_seconds: float,
+    resume: bool,
+    opener: Any = urlopen,
+    clock: Any = time.perf_counter,
+    sleeper: Any = time.sleep,
+) -> dict[str, Any]:
+    if dataset.get("data_policy") != "synthetic_only":
+        raise ValueError("collection requires a synthetic_only dataset")
+    required_metadata = {"model", "prompt_version", "knowledge_version", "tool_version"}
+    missing_metadata = sorted(required_metadata - set(metadata))
+    if missing_metadata:
+        raise ValueError(f"missing metadata: {', '.join(missing_metadata)}")
+    expected_metadata = {
+        **metadata,
+        "dataset_version": str(dataset["dataset_version"]),
+        "api_url": api_url,
+    }
+
+    if output.exists():
+        if not resume:
+            raise ValueError("output exists; use --resume or choose another path")
+        bundle = load_json(output)
+        existing_metadata = bundle.get("metadata") or {}
+        for key, expected in expected_metadata.items():
+            if str(existing_metadata.get(key)) != str(expected):
+                raise ValueError(f"resume metadata mismatch: {key}")
+    else:
+        bundle = {
+            "metadata": {
+                **expected_metadata,
+                "data_policy": dataset["data_policy"],
+                "collected_at_utc": utc_now(),
+            },
+            "responses": [],
+            "complete": False,
+        }
+
+    records = response_records(bundle)
+    cases = dataset["cases"]
+    endpoint = ask_endpoint(api_url)
+    for index, case in enumerate(cases):
+        case_id = str(case["id"])
+        if case_id in records:
+            continue
+        started = clock()
+        status, response = post_case(endpoint, case, timeout=timeout, opener=opener)
+        elapsed_ms = round(1000 * (clock() - started), 2)
+        records[case_id] = {
+            "case_id": case_id,
+            "http_status": status,
+            "latency_ms": elapsed_ms,
+            "response": response,
+        }
+        bundle["responses"] = [
+            records[str(item["id"])]
+            for item in cases
+            if str(item["id"]) in records
+        ]
+        bundle["metadata"]["updated_at_utc"] = utc_now()
+        bundle["complete"] = len(bundle["responses"]) == len(cases)
+        write_json_atomic(output, bundle)
+        print(f"collected {len(bundle['responses'])}/{len(cases)}: {case_id}")
+        if delay_seconds and index < len(cases) - 1:
+            sleeper(delay_seconds)
+    return bundle
 
 
 def validate_dataset(dataset: dict[str, Any]) -> list[str]:
@@ -322,6 +467,17 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("validate")
+    collect = subparsers.add_parser("collect")
+    collect.add_argument("--api-url", default="http://127.0.0.1:8000")
+    collect.add_argument("--allow-remote-api", action="store_true")
+    collect.add_argument("--output", type=Path, required=True)
+    collect.add_argument("--model", required=True)
+    collect.add_argument("--prompt-version", required=True)
+    collect.add_argument("--knowledge-version", required=True)
+    collect.add_argument("--tool-version", required=True)
+    collect.add_argument("--timeout", type=float, default=250.0)
+    collect.add_argument("--delay-seconds", type=float, default=0.5)
+    collect.add_argument("--resume", action="store_true")
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--responses", type=Path, action="append", required=True)
     prepare.add_argument("--labels", action="append")
@@ -350,6 +506,41 @@ def main() -> int:
                     "categories": dict(sorted(counts.items())),
                 },
                 ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if args.command == "collect":
+        if args.timeout <= 0 or args.delay_seconds < 0:
+            parser.error("--timeout must be positive and --delay-seconds non-negative")
+        try:
+            api_url = normalize_api_url(
+                args.api_url, allow_remote=args.allow_remote_api
+            )
+            bundle = collect_responses(
+                dataset,
+                args.output,
+                api_url=api_url,
+                metadata={
+                    "model": args.model,
+                    "prompt_version": args.prompt_version,
+                    "knowledge_version": args.knowledge_version,
+                    "tool_version": args.tool_version,
+                },
+                timeout=args.timeout,
+                delay_seconds=args.delay_seconds,
+                resume=args.resume,
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: {error}")
+            return 1
+        print(
+            json.dumps(
+                {
+                    "output": str(args.output),
+                    "responses": len(bundle["responses"]),
+                    "complete": bundle["complete"],
+                }
             )
         )
         return 0
