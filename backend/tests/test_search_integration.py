@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 from pydantic import ValidationError
-
 from app.config import Settings
 from app.rag.vault import VaultRAG
 from app.schemas import AskRequest

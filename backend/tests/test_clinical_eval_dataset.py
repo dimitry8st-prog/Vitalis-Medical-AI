@@ -2,7 +2,6 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER_PATH = ROOT / "evals" / "run_clinical_eval.py"
 SPEC = importlib.util.spec_from_file_location("vitalis_clinical_eval", RUNNER_PATH)
