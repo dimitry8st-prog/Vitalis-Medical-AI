@@ -20,7 +20,7 @@ Environment observed during the operator-guided session: Timeweb VPS, Ubuntu 26.
 - `Dockerfile.python`: Python 3.12, FastAPI, one worker, 384 MiB memory cap.
 - `compose.yaml`: safe mock default; publishes Node only on `127.0.0.1:3080`. Python is accessible inside the Compose network on port 8000, not published to the host.
 - Named volumes: `vitalis-ru_rag_data` at `/data` and `vitalis-ru_leads_data` at `/app/server/data`.
-- JSON Docker logs rotate at 5 MiB, two files per service. Both services restart unless stopped. No Docker healthcheck is configured; `depends_on` does not guarantee API readiness.
+- JSON Docker logs rotate at 5 MiB, two files per service. Both services restart unless stopped. Both services have healthchecks; Node waits for Python to become healthy before startup.
 - `deploy/compose.live.example.yaml`: reproduces the live override used on the VPS. Copy locally to `compose.override.yaml` only after creating `/root/.config/vitalis-ru/python.env` with the real key. This file is outside Git and has mode 600; parent directory mode 700. Do not print `docker compose config` without `--quiet` when secrets are loaded.
 - GigaChat is disabled. DeepSeek is enabled in live mode.
 
@@ -32,7 +32,7 @@ These instructions are for a prepared host, not a script to overwrite an existin
 
 1. Clone the repository, choose the intended commit, and enter the checkout.
 2. Inspect current containers and host ports. Keep other projects running.
-3. Build: `docker compose build`; start mock services: `docker compose up -d --no-build`.
+3. Build: `docker compose build`; start and wait for healthy mock services: `docker compose up -d --no-build --wait --wait-timeout 180`.
 4. Verify local Node `/api/health`, Python `/api/ai/health`, and `/app` on `http://127.0.0.1:3080`.
 5. Create the private env file using a hidden prompt, never pasting the key into command text:
 

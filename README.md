@@ -114,6 +114,17 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | http://localhost:8000/docs | Swagger FastAPI |
 | http://localhost:8000/health | `vault_chunks`, `llm_mode`, `web_search` |
 
+Контейнерный запуск в безопасном mock-режиме:
+
+```bash
+docker compose build
+docker compose up -d --no-build --wait --wait-timeout 180
+curl -fsS http://127.0.0.1:3080/api/ai/health
+```
+
+Оба сервиса имеют healthcheck, а Node запускается только после готовности Python.
+Тот же сценарий автоматически выполняется в CI вместе с проверкой `/app`.
+
 Без ключей оставьте `LLM_MODE=mock` в `.env`. Для живых ответов установите `LLM_MODE=live` и добавьте `DEEPSEEK_API_KEY`. `GIGACHAT_ENABLED=false` оставляет GigaChat в режиме заглушки. По умолчанию `EVIDENCE_GATE_MODE=warn`: при сбое веб-поиска ответ сохраняется, но явно помечается как непроверенный. Режим `strict` можно включить отдельно.
 
 ### Форма заявок
