@@ -148,6 +148,68 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             AskRequest(question="Лечение", mkb="Иванов 123456")
 
+    def test_card_uses_portal_guideline_title_codes_and_official_url(self):
+        hit = {
+            "title": "Геморрагический инсульт",
+            "path": "guidelines/rf/minzdrav-523_3.md",
+            "text": "Официальная библиографическая карточка",
+            "score": 0.8,
+            "year": 2025,
+            "stale": False,
+            "meta": {
+                "mkb": "I60",
+                "mkb_codes": "I60, I61, I62, Q28.2",
+                "url": "https://cr.minzdrav.gov.ru/view-cr/523_3",
+                "content_scope": "bibliographic_metadata_only",
+                "specialty_tags": "neurology neurosurgery",
+            },
+        }
+        card = self.service._build_card(
+            "Диагностика геморрагического инсульта",
+            None,
+            None,
+            None,
+            [hit],
+            [],
+        )
+        self.assertEqual(card["title"], "Геморрагический инсульт")
+        self.assertEqual(card["mkb"], "I60")
+        self.assertEqual(card["mkb_codes"], "I60, I61, I62, Q28.2")
+        self.assertEqual(card["specialty_tags"], ["neurology", "neurosurgery"])
+        source = card["tabs"]["rf"]["sources"][0]
+        self.assertEqual(
+            source["ref"], "https://cr.minzdrav.gov.ru/view-cr/523_3"
+        )
+        self.assertEqual(source["local_ref"], hit["path"])
+
+    def test_metadata_only_context_is_explicitly_not_clinical_evidence(self):
+        hit = {
+            "title": "Мигрень",
+            "path": "guidelines/rf/minzdrav-295_4.md",
+            "text": "Официальная библиографическая карточка",
+            "score": 0.7,
+            "year": 2024,
+            "stale": False,
+            "meta": {"content_scope": "bibliographic_metadata_only"},
+        }
+        context = self.service._format_context([hit], [hit], [], False)
+        self.assertIn("ТОЛЬКО МЕТАДАННЫЕ", context)
+        self.assertIn("не подтверждает диагностику", context)
+
+    def test_unfetched_registry_seed_does_not_satisfy_web_evidence_gate(self):
+        missing = self.service._missing_required_web(
+            "rf",
+            [
+                {
+                    "lang": "ru",
+                    "url": "https://cr.minzdrav.gov.ru/view-cr/523_3",
+                    "provider": "portal_registry",
+                    "content_scope": "bibliographic_metadata_only",
+                }
+            ],
+        )
+        self.assertEqual(missing, ["ru"])
+
 
 class MainApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_api_routes_and_validation_without_external_services(self):

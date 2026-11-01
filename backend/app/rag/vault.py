@@ -91,7 +91,19 @@ class VaultRAG:
     def load_or_build(self) -> int:
         meta_path = self.index_dir / "chunks.json"
         index_path = self.index_dir / "index.faiss"
-        if meta_path.exists() and index_path.exists():
+        manifest_path = self.index_dir / "manifest.json"
+        manifest = {}
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                manifest = {}
+        if (
+            meta_path.exists()
+            and index_path.exists()
+            and manifest.get("schema_version") == 1
+            and manifest.get("vault_fingerprint") == self._vault_fingerprint()
+        ):
             self.chunks = [
                 Chunk(**c) for c in json.loads(meta_path.read_text(encoding="utf-8"))
             ]
@@ -124,12 +136,33 @@ class VaultRAG:
     def _persist(self) -> None:
         meta_path = self.index_dir / "chunks.json"
         index_path = self.index_dir / "index.faiss"
+        manifest_path = self.index_dir / "manifest.json"
         meta_path.write_text(
             json.dumps([c.__dict__ for c in self.chunks], ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         if self.index is not None:
             faiss.write_index(self.index, str(index_path))
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "vault_fingerprint": self._vault_fingerprint(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _vault_fingerprint(self) -> str:
+        digest = hashlib.sha256()
+        for path in sorted(self.vault_dir.rglob("*.md")):
+            digest.update(path.relative_to(self.vault_dir).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+        return digest.hexdigest()
 
     @staticmethod
     def _split_frontmatter(raw: str) -> tuple[dict, str]:
@@ -142,7 +175,15 @@ class VaultRAG:
         for line in parts[1].strip().splitlines():
             if ":" in line:
                 k, v = line.split(":", 1)
-                meta[k.strip()] = v.strip().strip('"').strip("'")
+                value = v.strip()
+                if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+                    try:
+                        value = str(json.loads(value))
+                    except (TypeError, ValueError):
+                        value = value.strip('"')
+                else:
+                    value = value.strip("'")
+                meta[k.strip()] = value
         return meta, parts[2].strip()
 
     @staticmethod

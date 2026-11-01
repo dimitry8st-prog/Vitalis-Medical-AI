@@ -28,6 +28,7 @@ async def web_search(
     bilingual: bool = True,
     freshness_extra: bool = False,
     scope: str = "both",
+    seed_hits: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Search by clinical concepts, keeping RF and international evidence separate."""
     provider = settings.web_search_provider
@@ -39,6 +40,18 @@ async def web_search(
         if scope in ("intl", "both")
         else _english_variant(focus)
     )
+
+    for seed in seed_hits or []:
+        lang = str(seed.get("lang") or "ru").lower()
+        if lang not in {"ru", "en"}:
+            continue
+        _merge(
+            all_hits,
+            seen,
+            [seed],
+            lang,
+            "rf_registry" if lang == "ru" else "intl_society_guideline",
+        )
 
     literature_task = (
         asyncio.create_task(_literature_bundle(query, max_results, en_focus))
@@ -88,7 +101,7 @@ async def web_search(
         ),)).prompt_injection_detected
     ]
     selected = _balanced_results(all_hits, scope, max_results)
-    if scope in ("intl", "both") and settings.web_fetch_full_text:
+    if settings.web_fetch_full_text:
         selected = await enrich_primary_documents(
             selected,
             query,
@@ -142,6 +155,9 @@ def _merge(
         if lang == "ru":
             item["source_tier"] = _rf_source_tier(str(item.get("url") or ""))
             item["jurisdiction"] = "RU"
+            item["official_domain"] = is_russian_official(
+                str(item.get("url") or "")
+            )
         else:
             item.update(classify_international_source(str(item.get("url") or "")))
         item["document_type"] = _document_type(kind, str(item.get("title") or ""))
@@ -150,7 +166,9 @@ def _merge(
         if not key or key in seen:
             continue
         seen.add(key)
-        item["year"] = _extract_year(f"{item.get('title','')} {item.get('snippet','')}")
+        item["year"] = item.get("year") or _extract_year(
+            f"{item.get('title','')} {item.get('snippet','')}"
+        )
         all_hits.append(item)
 
 

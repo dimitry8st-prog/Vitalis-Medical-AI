@@ -374,16 +374,18 @@ function renderSources(containerId, sources, label){
   }
   list.forEach(s=>{
     const stale = s.stale ? '<span class="stale">устарел &gt;5 лет</span>' : '';
+    const metadataOnly = s.content_scope === 'bibliographic_metadata_only'
+      ? '<span class="stale">только карточка КР</span>' : '';
     const year = s.year ? ` (${s.year})` : '';
     const sourceUrl = safeExternalUrl(s.ref);
     if(sourceUrl){
       const a = document.createElement('a');
       a.href = sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}`;
+      a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}${metadataOnly}`;
       src.appendChild(a);
     } else {
       const d = document.createElement('div');
-      d.innerHTML = `${escapeHtml(s.title||'')} ${escapeHtml(s.ref||'')}${year}${stale}`;
+      d.innerHTML = `${escapeHtml(s.title||'')} ${escapeHtml(s.ref||'')}${year}${stale}${metadataOnly}`;
       src.appendChild(d);
     }
   });
@@ -413,6 +415,7 @@ function render(data){
   document.getElementById('card').style.display='block';
   const c = data.card;
   document.getElementById('cardMkb').textContent = c.mkb || '—';
+  document.getElementById('cardMkb').title = c.mkb_codes || c.mkb || '';
   document.getElementById('cardTitle').textContent = c.title || 'Клинический вопрос';
   const meta = document.getElementById('cardMeta');
   meta.innerHTML = '';
@@ -421,6 +424,14 @@ function render(data){
     const chip = document.createElement('span');
     chip.className = 'chip';
     chip.textContent = label;
+    meta.appendChild(chip);
+  });
+  const specialtyLabels = {neurology:'Неврология', neurosurgery:'Нейрохирургия'};
+  (c.specialty_tags || []).forEach(tag=>{
+    if(!specialtyLabels[tag]) return;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = specialtyLabels[tag];
     meta.appendChild(chip);
   });
 

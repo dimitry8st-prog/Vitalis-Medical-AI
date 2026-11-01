@@ -14,6 +14,11 @@ ALLOWED_OFFICIAL_DOMAINS = (
     "who.int",
 )
 VALID_STATUSES = {"needs_review", "approved", "rejected", "superseded"}
+VALID_CONTENT_SCOPES = {
+    "bibliographic_metadata_only",
+    "reviewed_excerpt",
+    "reviewed_full_text",
+}
 REQUIRED_FIELDS = {
     "id",
     "title",
@@ -22,6 +27,7 @@ REQUIRED_FIELDS = {
     "jurisdiction",
     "language",
     "document_type",
+    "content_scope",
     "publication_year",
     "source_version",
     "checked_at",
@@ -87,6 +93,8 @@ def validate_registry(registry: dict[str, Any]) -> list[str]:
             errors.append(f"{source_id}: URL is not an allowlisted official HTTPS URL")
         if source["status"] not in VALID_STATUSES:
             errors.append(f"{source_id}: invalid status")
+        if source["content_scope"] not in VALID_CONTENT_SCOPES:
+            errors.append(f"{source_id}: invalid content_scope")
         if not isinstance(source["ingest_allowed"], bool):
             errors.append(f"{source_id}: ingest_allowed must be boolean")
         if source["ingest_allowed"] and source["status"] != "approved":
@@ -95,6 +103,15 @@ def validate_registry(registry: dict[str, Any]) -> list[str]:
             for field in ("reviewed_at", "reviewed_by"):
                 if not source.get(field):
                     errors.append(f"{source_id}: approved source requires {field}")
+        if (
+            source["ingest_allowed"]
+            and source["content_scope"] == "bibliographic_metadata_only"
+            and source["document_type"] != "clinical_guideline_metadata"
+        ):
+            errors.append(
+                f"{source_id}: metadata-only ingestion requires "
+                "document_type=clinical_guideline_metadata"
+            )
         year = source["publication_year"]
         if not isinstance(year, int) or not 1900 <= year <= current_year + 1:
             errors.append(f"{source_id}: invalid publication_year")
