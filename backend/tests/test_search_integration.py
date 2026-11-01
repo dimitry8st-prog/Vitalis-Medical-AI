@@ -182,6 +182,18 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(source["local_ref"], hit["path"])
 
+    def test_hemorrhagic_stroke_is_not_misclassified_as_hemorrhoids(self):
+        card = self.service._build_card(
+            "Диагностика геморрагического инсульта",
+            None,
+            None,
+            None,
+            [],
+            [],
+        )
+        self.assertNotEqual(card["mkb"], "K64")
+        self.assertNotEqual(card["title"], "Геморрой")
+
     def test_metadata_only_context_is_explicitly_not_clinical_evidence(self):
         hit = {
             "title": "Мигрень",

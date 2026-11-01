@@ -892,7 +892,12 @@ class AskService:
         title = _resolve_title(question, mkb, rag_hits, rf, intl)
         rag_codes = _rag_mkb_codes(rag_hits)
         specialty_tags = _rag_specialty_tags(rag_hits)
-        code = (mkb or _guess_mkb(question) or (rag_codes[0] if rag_codes else "—")).upper()
+        code = (
+            mkb
+            or (rag_codes[0] if rag_codes else None)
+            or _guess_mkb(question)
+            or "—"
+        ).upper()
         all_codes = ", ".join(rag_codes) if rag_codes else code
 
         rf_sections = _extract_sections((rf or {}).get("content") or "")
@@ -1008,7 +1013,7 @@ def _guess_title(q: str) -> str | None:
         (("пневмония",), "Внебольничная пневмония"),
         (("гипертенз", "гипертония"), "Артериальная гипертензия"),
         (("перелом", "позвоночник", "позвон"), "Травма / перелом позвоночника"),
-        (("геморрой", "геморр"), "Геморрой"),
+        (("геморрой", "геморроид"), "Геморрой"),
     ]
     for keys, title in mapping:
         if any(k in q_low for k in keys):
@@ -1029,7 +1034,7 @@ def _guess_mkb(q: str) -> str | None:
         return "I10"
     if any(k in q_low for k in ("перелом", "позвоночник", "позвон")):
         return "S22"
-    if "геморрой" in q_low or "геморр" in q_low:
+    if "геморрой" in q_low or "геморроид" in q_low:
         return "K64"
     return None
 
