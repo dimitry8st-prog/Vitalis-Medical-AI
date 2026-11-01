@@ -12,7 +12,7 @@ document_type: "clinical_guideline_metadata"
 source_version: "493_3"
 url: "https://cr.minzdrav.gov.ru/view-cr/493_3"
 source_url: "https://cr.minzdrav.gov.ru/view-cr/493_3"
-specialty_tags: "neurology neurosurgery"
+specialty_tags: "neurosurgery"
 content_scope: "bibliographic_metadata_only"
 review_status: "approved_metadata_only"
 ---
@@ -23,7 +23,7 @@ review_status: "approved_metadata_only"
 
 ## Профили
 
-Неврология, Нейрохирургия.
+Нейрохирургия.
 
 ## Коды МКБ
 

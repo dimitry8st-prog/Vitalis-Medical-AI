@@ -422,7 +422,6 @@
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
-        "neurology",
         "neurosurgery",
         "mkb:S06.1",
         "mkb:S06.2",
@@ -526,7 +525,6 @@
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
-        "neurology",
         "neurosurgery",
         "mkb:S06.0"
       ],
@@ -607,7 +605,6 @@
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
-        "neurology",
         "neurosurgery",
         "mkb:S06"
       ],
