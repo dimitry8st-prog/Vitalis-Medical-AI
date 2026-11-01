@@ -78,6 +78,40 @@ class CitationGuardTests(unittest.TestCase):
         self.assertTrue(guarded["citation_validation"]["missing_required_citation"])
         self.assertTrue(guarded["citation_validation"]["blocked"])
 
+    def test_metadata_only_rag_url_does_not_validate_clinical_citation(self):
+        url = "https://cr.minzdrav.gov.ru/view-cr/295_4"
+        guarded = guard_clinical_payload(
+            {"content": f"Утверждение: {url}"},
+            web_hits=[],
+            rag_hits=[
+                {
+                    "meta": {
+                        "url": url,
+                        "content_scope": "bibliographic_metadata_only",
+                    }
+                }
+            ],
+            strict=False,
+        )
+        self.assertIn(UNVERIFIED_URL_MARKER, guarded["content"])
+        self.assertNotIn(url, guarded["content"])
+
+    def test_unfetched_registry_seed_does_not_validate_clinical_citation(self):
+        url = "https://cr.minzdrav.gov.ru/view-cr/523_3"
+        guarded = guard_clinical_payload(
+            {"content": f"Утверждение: {url}"},
+            web_hits=[
+                {
+                    "url": url,
+                    "content_scope": "bibliographic_metadata_only",
+                    "full_text_checked": False,
+                }
+            ],
+            rag_hits=[],
+            strict=False,
+        )
+        self.assertIn(UNVERIFIED_URL_MARKER, guarded["content"])
+
 
 if __name__ == "__main__":
     unittest.main()

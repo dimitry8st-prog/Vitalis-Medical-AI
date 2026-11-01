@@ -16,9 +16,17 @@ class SourceRegistryTests(unittest.TestCase):
             Path(__file__).resolve().parents[2] / "vault" / "source_registry.json"
         )
 
-    def test_checked_candidates_are_valid_but_not_auto_ingested(self):
+    def test_registry_contains_only_scope_limited_approved_ingestion(self):
         self.assertEqual(validate_registry(self.registry), [])
-        self.assertEqual(approved_for_ingestion(self.registry), [])
+        approved = approved_for_ingestion(self.registry)
+        self.assertEqual(len(approved), 17)
+        self.assertTrue(
+            all(
+                source["content_scope"] == "bibliographic_metadata_only"
+                and source["document_type"] == "clinical_guideline_metadata"
+                for source in approved
+            )
+        )
 
     def test_unapproved_source_cannot_enable_ingestion(self):
         registry = deepcopy(self.registry)
@@ -40,6 +48,15 @@ class SourceRegistryTests(unittest.TestCase):
             path = Path(directory) / "registry.json"
             path.write_text("{}", encoding="utf-8")
             self.assertTrue(validate_registry(load_registry(path)))
+
+    def test_ingested_metadata_cannot_claim_full_guideline_document_type(self):
+        registry = deepcopy(self.registry)
+        approved = next(
+            source for source in registry["sources"] if source["ingest_allowed"]
+        )
+        approved["document_type"] = "clinical_guideline"
+        errors = validate_registry(registry)
+        self.assertTrue(any("metadata-only ingestion" in error for error in errors))
 
 
 if __name__ == "__main__":

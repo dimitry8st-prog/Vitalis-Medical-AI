@@ -23,10 +23,23 @@
 `ingest_allowed=true` допустим только вместе со статусом `approved`, датой и именем
 проверившего специалиста. До этого источник не считается частью RAG.
 
+Поле `content_scope` обязательно. Значение `bibliographic_metadata_only` разрешает
+индексировать только проверенную карточку источника; оно не является медицинским
+одобрением полного текста и не может подтверждать клиническое утверждение или дозировку.
+
 Проверка реестра:
 
 ```bash
 python backend/app/rag/source_registry.py validate vault/source_registry.json
+```
+
+Повторная синхронизация карточек КР из выгрузки портала:
+
+```bash
+PYTHONPATH=backend python backend/app/rag/portal_guidelines.py \
+  ../st8dom-site/data/clinical_guidelines.json vault vault/source_registry.json \
+  --reviewed-at 2026-11-01 \
+  --reviewed-by "Ответственный за проверку метаданных"
 ```
 
 ## Обязательные метаданные

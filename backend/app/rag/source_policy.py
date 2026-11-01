@@ -109,3 +109,8 @@ def is_primary_international_source(url: str) -> bool:
         "official_guideline",
         "regulator_or_formulary",
     }
+
+
+def is_primary_evidence_source(url: str) -> bool:
+    """Allow bounded full-text checks only on first-party official sources."""
+    return is_russian_official(url) or is_primary_international_source(url)

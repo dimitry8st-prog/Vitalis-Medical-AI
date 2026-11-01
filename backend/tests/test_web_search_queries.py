@@ -1,8 +1,13 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
+from app.config import Settings
 from app.llm.deepseek import DeepSeekClient
 from app.rag.document_fetch import select_relevant_excerpt
-from app.rag.source_policy import classify_international_source
+from app.rag.source_policy import (
+    classify_international_source,
+    is_primary_evidence_source,
+)
 from app.rag.web_search import (
     _balanced_results,
     _build_queries,
@@ -10,6 +15,7 @@ from app.rag.web_search import (
     _english_variant,
     _extract_focus,
     _rf_search_focus,
+    web_search,
 )
 from app.services.ask import AskService
 
@@ -142,6 +148,52 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         excerpt = select_relevant_excerpt(text, "ischemic stroke rehabilitation")
         self.assertIn("rehabilitation", excerpt.lower())
         self.assertIn("guideline", excerpt.lower())
+
+    def test_primary_evidence_policy_accepts_minzdrav_but_not_lookalikes(self) -> None:
+        self.assertTrue(
+            is_primary_evidence_source(
+                "https://cr.minzdrav.gov.ru/view-cr/523_3"
+            )
+        )
+        self.assertFalse(
+            is_primary_evidence_source(
+                "https://cr.minzdrav.gov.ru.evil.example/view-cr/523_3"
+            )
+        )
+        self.assertFalse(
+            is_primary_evidence_source("http://cr.minzdrav.gov.ru/view-cr/523_3")
+        )
+
+
+class RussianFullTextSearchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rf_search_enriches_official_full_text(self) -> None:
+        hit = {
+            "url": "https://cr.minzdrav.gov.ru/view-cr/523_3",
+            "title": "Геморрагический инсульт",
+            "snippet": "Официальная карточка",
+        }
+        with (
+            patch(
+                "app.rag.web_search._run_rf_provider",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "app.rag.web_search.enrich_primary_documents",
+                new_callable=AsyncMock,
+                side_effect=lambda rows, *_args, **_kwargs: rows,
+            ) as enrich,
+        ):
+            rows = await web_search(
+                "лечение геморрагического инсульта",
+                Settings(web_fetch_full_text=True),
+                max_results=2,
+                bilingual=False,
+                scope="rf",
+                seed_hits=[hit],
+            )
+        self.assertTrue(rows)
+        enrich.assert_awaited_once()
 
 
 if __name__ == "__main__":

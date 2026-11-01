@@ -64,11 +64,15 @@ def _normalize_url(value: str) -> str:
 def _allowed_urls(web_hits: list[dict[str, Any]], rag_hits: list[dict[str, Any]]) -> set[str]:
     allowed: set[str] = set()
     for hit in web_hits:
+        if hit.get("content_scope") == "bibliographic_metadata_only":
+            continue
         normalized = _normalize_url(str(hit.get("url") or ""))
         if normalized:
             allowed.add(normalized)
     for hit in rag_hits:
         meta = hit.get("meta") or {}
+        if meta.get("content_scope") == "bibliographic_metadata_only":
+            continue
         for key in ("url", "source_url"):
             normalized = _normalize_url(str(meta.get(key) or ""))
             if normalized:
