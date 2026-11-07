@@ -15,6 +15,7 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         root = Path(self.directory.name)
+        self.root = root
         self.rag = VaultRAG(root / "vault", root / "index")
         self.rag.build()
         self.service = AskService(Settings(llm_mode="mock"), self.rag)
@@ -142,6 +143,54 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["search"]["web_forced"])
         self.assertTrue(result["search"]["web_disabled"])
         self.assertEqual(result["search"]["evidence_status"], "limited")
+
+    async def test_official_local_full_text_satisfies_rf_evidence_gate(self):
+        vault = self.root / "vault"
+        vault.mkdir(parents=True, exist_ok=True)
+        url = "https://cr.minzdrav.gov.ru/view-cr/295_4"
+        (vault / "migraine.md").write_text(
+            "---\n"
+            'title: "Мигрень"\n'
+            'mkb: "G43"\n'
+            'mkb_codes: "G43, G43.0"\n'
+            'year: "2026"\n'
+            'source: "Минздрав России"\n'
+            'jurisdiction: "RU"\n'
+            'language: "ru"\n'
+            f'source_url: "{url}"\n'
+            f'url: "{url}"\n'
+            'specialty_tags: "neurology"\n'
+            'content_scope: "official_full_text_extracted"\n'
+            'full_text_checked: true\n'
+            'page_count: 92\n'
+            'full_text_sha256: "abc123"\n'
+            "---\n\n## Страница 12\n\nДиагностика и лечение мигрени G43.",
+            encoding="utf-8",
+        )
+        self.rag.build()
+        self.service.settings.evidence_gate_mode = "strict"
+
+        async def complete(system, user):
+            self.calls.append((system, user))
+            return {
+                "provider": "synthetic",
+                "mode": "mock",
+                "content": f"Краткий ответ. Источник: {url}",
+            }
+
+        self.service.deepseek.complete = complete
+        with patch("app.services.ask.web_search", new_callable=AsyncMock) as search:
+            result = await self.service.ask(
+                "Лечение мигрени G43", mode="rf", use_web=False
+            )
+        search.assert_not_called()
+        self.assertEqual(result["search"]["evidence_status"], "sources_found")
+        self.assertEqual(result["search"]["missing_web_languages"], [])
+        self.assertIn("[Страница 12]", self.calls[0][1])
+        source = result["card"]["tabs"]["rf"]["sources"][0]
+        self.assertTrue(source["full_text_checked"])
+        self.assertEqual(source["page_count"], 92)
+        self.assertEqual(source["full_text_sha256"], "abc123")
 
     def test_mkb_field_accepts_code_but_rejects_free_text(self):
         self.assertEqual(AskRequest(question="Лечение", mkb="I21.9").mkb, "I21.9")
