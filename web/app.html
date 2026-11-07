@@ -68,6 +68,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .src h5{font-family:var(--mn);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-bottom:8px}
 .src a,.src div{display:block;font-size:12.5px;padding:8px 10px;border-radius:8px;background:var(--ice);border:1px solid var(--line);margin-bottom:6px;color:var(--navy)}
 .stale{color:#B45309;font-size:11px;margin-left:6px}
+.verified{color:#047857;font-size:11px;margin-left:6px}
 .learning{margin-top:16px;padding:14px 16px;border-radius:12px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.28);font-size:13px;line-height:1.45}
 .learning h5{font-family:var(--mn);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px;color:var(--mint)}
 .learning a{display:block;color:#0369a1;margin-top:6px;overflow-wrap:anywhere}
@@ -376,16 +377,18 @@ function renderSources(containerId, sources, label){
     const stale = s.stale ? '<span class="stale">устарел &gt;5 лет</span>' : '';
     const metadataOnly = s.content_scope === 'bibliographic_metadata_only'
       ? '<span class="stale">только карточка КР</span>' : '';
+    const fullText = s.full_text_checked && s.content_scope === 'official_full_text_extracted'
+      ? '<span class="verified">полный текст проверен</span>' : '';
     const year = s.year ? ` (${s.year})` : '';
     const sourceUrl = safeExternalUrl(s.ref);
     if(sourceUrl){
       const a = document.createElement('a');
       a.href = sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}${metadataOnly}`;
+      a.innerHTML = `${escapeHtml(s.title || s.ref)}${year}${stale}${metadataOnly}${fullText}`;
       src.appendChild(a);
     } else {
       const d = document.createElement('div');
-      d.innerHTML = `${escapeHtml(s.title||'')} ${escapeHtml(s.ref||'')}${year}${stale}${metadataOnly}`;
+      d.innerHTML = `${escapeHtml(s.title||'')} ${escapeHtml(s.ref||'')}${year}${stale}${metadataOnly}${fullText}`;
       src.appendChild(d);
     }
   });

@@ -14,6 +14,57 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-zA-Zа-яА-ЯёЁ0-9]+", text.lower())
 
 
+_SEARCH_STOPWORDS = {
+    "как",
+    "что",
+    "для",
+    "или",
+    "при",
+    "это",
+    "лечение",
+    "лечить",
+    "диагностика",
+    "рекомендации",
+    "протокол",
+    "the",
+    "and",
+    "for",
+    "with",
+}
+_MKB_RE = re.compile(r"(?<![A-ZА-Я0-9])[A-ZА-Я]\d{2}(?:\.\d{1,4})?", re.I)
+_PAGE_RE = re.compile(r"(?m)^##\s+Страница\s+(\d+)\s*$")
+
+
+def _stem(token: str) -> str:
+    token = token.casefold().replace("ё", "е")
+    if len(token) <= 5:
+        return token
+    return token[:6]
+
+
+def _search_terms(text: str) -> set[str]:
+    return {
+        _stem(token)
+        for token in _tokenize(text)
+        if len(token) >= 3 and token.casefold() not in _SEARCH_STOPWORDS
+    }
+
+
+def _mkb_codes(text: str) -> set[str]:
+    return {match.upper().replace("А", "A") for match in _MKB_RE.findall(text or "")}
+
+
+def _source_priority(meta: dict) -> float:
+    scope = str(meta.get("content_scope") or "")
+    if scope == "official_full_text_extracted":
+        return 0.35
+    if scope in {"reviewed_excerpt", "reviewed_full_text"}:
+        return 0.08
+    if scope == "bibliographic_metadata_only":
+        return -0.08
+    return 0.0
+
+
 def _hash_embed(text: str, dim: int = 384) -> np.ndarray:
     """Простой bag-of-hashes эмбеддинг без внешних моделей (работает офлайн)."""
     vec = np.zeros(dim, dtype=np.float32)
@@ -115,23 +166,46 @@ class VaultRAG:
         if not self.index or not self.chunks:
             return []
         q = _hash_embed(query, self.dim).reshape(1, -1)
-        scores, idxs = self.index.search(q, min(k, len(self.chunks)))
-        out = []
+        candidate_count = min(max(k * 32, 128), len(self.chunks))
+        scores, idxs = self.index.search(q, candidate_count)
+        query_terms = _search_terms(query)
+        query_codes = _mkb_codes(query)
+        ranked = []
         for score, i in zip(scores[0], idxs[0]):
             if i < 0:
                 continue
             c = self.chunks[i]
-            out.append(
+            title_terms = _search_terms(c.title)
+            title_overlap = len(query_terms & title_terms)
+            meta_codes = _mkb_codes(
+                f"{c.meta.get('mkb_codes') or ''} {c.meta.get('mkb') or ''}"
+            )
+            rank_score = float(score)
+            if title_overlap:
+                rank_score += min(1.5, 0.65 * title_overlap)
+            if query_codes & meta_codes:
+                rank_score += 2.0
+            rank_score += _source_priority(c.meta)
+            ranked.append(
                 {
                     "id": c.id,
                     "path": c.path,
                     "title": c.title,
                     "text": c.text,
-                    "score": float(score),
+                    "score": rank_score,
+                    "vector_score": float(score),
                     "meta": c.meta,
                 }
             )
-        return out
+        ranked.sort(
+            key=lambda hit: (
+                hit["score"],
+                _source_priority(hit["meta"]),
+                hit["vector_score"],
+            ),
+            reverse=True,
+        )
+        return ranked[:k]
 
     def _persist(self) -> None:
         meta_path = self.index_dir / "chunks.json"
@@ -188,6 +262,32 @@ class VaultRAG:
 
     @staticmethod
     def _chunk_text(text: str, max_len: int = 700) -> list[str]:
+        page_matches = list(_PAGE_RE.finditer(text))
+        if page_matches:
+            chunks: list[str] = []
+            preamble = text[: page_matches[0].start()].strip()
+            if preamble:
+                chunks.extend(VaultRAG._chunk_plain_text(preamble, max_len))
+            for index, match in enumerate(page_matches):
+                end = (
+                    page_matches[index + 1].start()
+                    if index + 1 < len(page_matches)
+                    else len(text)
+                )
+                page_text = text[match.end() : end].strip()
+                marker = f"[Страница {match.group(1)}]"
+                page_chunks = VaultRAG._chunk_plain_text(
+                    page_text,
+                    max(120, max_len - len(marker) - 1),
+                )
+                chunks.extend(
+                    f"{marker} {chunk}".strip() for chunk in page_chunks
+                )
+            return chunks
+        return VaultRAG._chunk_plain_text(text, max_len)
+
+    @staticmethod
+    def _chunk_plain_text(text: str, max_len: int) -> list[str]:
         paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
         if not paras:
             return [text[:max_len]] if text.strip() else []

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from app.rag.source_policy import is_primary_evidence_source
+
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}]+", re.IGNORECASE)
 DOSE_RE = re.compile(
     r"(?i)(?<!\w)\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?\s*"
@@ -80,16 +82,39 @@ def _allowed_urls(web_hits: list[dict[str, Any]], rag_hits: list[dict[str, Any]]
     return allowed
 
 
-def _supported_doses(web_hits: list[dict[str, Any]]) -> set[str]:
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in {"true", "yes", "1", "да"}
+
+
+def _supported_doses(
+    web_hits: list[dict[str, Any]], rag_hits: list[dict[str, Any]]
+) -> set[str]:
     supported: set[str] = set()
     for hit in web_hits:
-        if not hit.get("full_text_checked"):
+        if not hit.get("full_text_checked") or not is_primary_evidence_source(
+            str(hit.get("url") or "")
+        ):
             continue
         evidence = " ".join(
             str(hit.get(key) or "")
             for key in ("evidence_excerpt", "full_text_excerpt")
         )
         supported.update(_normalize_dose(match.group(0)) for match in DOSE_RE.finditer(evidence))
+    for hit in rag_hits:
+        meta = hit.get("meta") or {}
+        source_url = str(meta.get("source_url") or meta.get("url") or "")
+        if (
+            meta.get("content_scope") != "official_full_text_extracted"
+            or not _truthy(meta.get("full_text_checked"))
+            or not is_primary_evidence_source(source_url)
+        ):
+            continue
+        evidence = str(hit.get("text") or "")
+        supported.update(
+            _normalize_dose(match.group(0)) for match in DOSE_RE.finditer(evidence)
+        )
     return supported
 
 
@@ -109,7 +134,7 @@ def guard_clinical_payload(
 
     content = str(payload["content"])
     allowed = _allowed_urls(web_hits, rag_hits)
-    supported_doses = _supported_doses(web_hits)
+    supported_doses = _supported_doses(web_hits, rag_hits)
     cited_urls = 0
     verified_urls = 0
     removed_urls = 0

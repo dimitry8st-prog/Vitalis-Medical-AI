@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-01",
+  "updated_at": "2026-11-07",
   "default_ingestion_policy": "deny",
   "sources": [
     {
@@ -147,7 +147,7 @@
       "publication_year": 2025,
       "source_version": "995_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -167,8 +167,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-523_3",
@@ -182,7 +182,7 @@
       "publication_year": 2025,
       "source_version": "523_3",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -195,8 +195,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-1087_1",
@@ -210,7 +210,7 @@
       "publication_year": 2026,
       "source_version": "1087_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -225,8 +225,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-567_2",
@@ -240,7 +240,7 @@
       "publication_year": 2025,
       "source_version": "567_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -253,8 +253,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-1031_1",
@@ -268,7 +268,7 @@
       "publication_year": 2026,
       "source_version": "1031_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -278,8 +278,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-165_2",
@@ -293,7 +293,7 @@
       "publication_year": 2025,
       "source_version": "165_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -305,8 +305,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-295_4",
@@ -320,7 +320,7 @@
       "publication_year": 2024,
       "source_version": "295_4",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -338,8 +338,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-988_1",
@@ -353,7 +353,7 @@
       "publication_year": 2025,
       "source_version": "988_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -374,8 +374,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-733_2",
@@ -389,7 +389,7 @@
       "publication_year": 2025,
       "source_version": "733_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -403,8 +403,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-732_2",
@@ -418,7 +418,7 @@
       "publication_year": 2026,
       "source_version": "732_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -433,8 +433,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-773_2",
@@ -448,7 +448,7 @@
       "publication_year": 2026,
       "source_version": "773_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -457,8 +457,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-593_4",
@@ -472,7 +472,7 @@
       "publication_year": 2026,
       "source_version": "593_4",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -482,8 +482,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-1046_1",
@@ -497,7 +497,7 @@
       "publication_year": 2026,
       "source_version": "1046_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -506,8 +506,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-734_2",
@@ -521,7 +521,7 @@
       "publication_year": 2026,
       "source_version": "734_2",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -530,8 +530,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-998_1",
@@ -545,7 +545,7 @@
       "publication_year": 2025,
       "source_version": "998_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -562,8 +562,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-1077_1",
@@ -577,7 +577,7 @@
       "publication_year": 2026,
       "source_version": "1077_1",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -586,8 +586,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     },
     {
       "id": "ru-minzdrav-neuro-493_3",
@@ -601,7 +601,7 @@
       "publication_year": 2026,
       "source_version": "493_3",
       "revision_due": null,
-      "checked_at": "2026-11-01",
+      "checked_at": "2026-11-07",
       "status": "approved",
       "ingest_allowed": true,
       "topics": [
@@ -610,8 +610,8 @@
       ],
       "verification_level": "official_registry_metadata",
       "review_notes": "Одобрена загрузка только библиографических метаданных официальной карточки Минздрава. Полный текст и медицинские утверждения не рассматривались и требуют отдельной врачебной проверки.",
-      "reviewed_at": "2026-11-01",
-      "reviewed_by": "Дмитрий Степанов (поручение на загрузку метаданных КР)"
+      "reviewed_at": "2026-11-07",
+      "reviewed_by": "Dmitry Stepanov — owner-authorized metadata sync"
     }
   ]
 }

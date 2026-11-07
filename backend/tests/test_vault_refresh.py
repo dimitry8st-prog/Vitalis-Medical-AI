@@ -34,6 +34,44 @@ class VaultRefreshTests(unittest.TestCase):
             self.assertGreater(second_count, first_count)
             self.assertTrue(any(chunk.title == "Second" for chunk in second.chunks))
 
+    def test_full_text_chunks_keep_page_number(self):
+        chunks = VaultRAG._chunk_text(
+            "# Мигрень\n\n## Страница 1\n\nПервая страница.\n\n"
+            "## Страница 2\n\nВторая страница.",
+            max_len=80,
+        )
+        self.assertTrue(any(chunk.startswith("[Страница 1]") for chunk in chunks))
+        self.assertTrue(any(chunk.startswith("[Страница 2]") for chunk in chunks))
+
+    def test_hybrid_search_prefers_official_title_and_mkb_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            index = root / "index"
+            vault.mkdir()
+            (vault / "secondary.md").write_text(
+                "---\n"
+                "title: \"Общий обзор головной боли\"\n"
+                "content_scope: \"reviewed_excerpt\"\n"
+                "---\n\nМигрень и другие состояния.",
+                encoding="utf-8",
+            )
+            (vault / "official.md").write_text(
+                "---\n"
+                "title: \"Мигрень\"\n"
+                "mkb_codes: \"G43, G43.0\"\n"
+                "content_scope: \"official_full_text_extracted\"\n"
+                "---\n\n## Страница 1\n\nОфициальный текст.",
+                encoding="utf-8",
+            )
+            rag = VaultRAG(vault, index)
+            rag.build()
+            hits = rag.search("Лечение мигрени G43", k=2)
+            self.assertEqual(hits[0]["title"], "Мигрень")
+            self.assertEqual(
+                hits[0]["meta"]["content_scope"], "official_full_text_extracted"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

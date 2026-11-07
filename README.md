@@ -153,8 +153,11 @@ curl -fsS http://127.0.0.1:3080/api/ai/health
 - Клинический quality gate и 30 синтетических сценариев: `backend/evals/README.md`
 - Реестр проверяемых первоисточников и review-gate: `vault/source_registry.json`
 - 17 официальных карточек КР Минздрава по неврологии/нейрохирургии: `vault/guidelines/rf`
-- Проверка полного текста российских КР выполняется по официальной странице Минздрава;
-  локальная карточка RAG содержит только библиографические метаданные и коды МКБ.
+- Полные тексты КР РФ с проверкой PDF, SHA-256 и страниц:
+  `docs/RF_GUIDELINES_FULLTEXT.md`
+- Безопасный односторонний импорт одобренных заметок Life-OS:
+  `docs/LIFEOS_RAG_INTEGRATION.md`
+- Production-gates, порядок staging, выпуска и отката: `docs/PRODUCTION_READINESS.md`
 
 
 ### Контролируемое обновление знаний
