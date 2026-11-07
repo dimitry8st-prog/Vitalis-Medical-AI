@@ -1,5 +1,12 @@
 # Life-OS → Vitalis RAG
 
+## Где находится фактический Life-OS
+
+Рабочая база Life-OS находится в портале `st8dom-site`: runtime-БД (`LifeOSMaterial`,
+`Article`, `ArticleSource`), `data/content-packages/` и `obsidian-vault/`. Репозиторий
+`Life-Os/data/demo-vault` содержит только демонстрацию и не используется для вывода о
+фактических материалах.
+
 ## Граница интеграции
 
 Life-OS остаётся владельцем исходных заметок. Vitalis читает явный каталог Obsidian
@@ -50,7 +57,27 @@ reviewed_at: 2026-11-07
 - не имеет проверяемого происхождения;
 - пытается объявить себя официальным полным текстом.
 
-## Синхронизация
+## Синхронизация фактической базы портала
+
+На сервере `st8dom-site` создаётся read-only export:
+
+```bash
+python -m scripts.export_vitalis_lifeos \
+  --output /private/path/lifeos-vitalis.json
+```
+
+Затем на стороне Vitalis:
+
+```bash
+PYTHONPATH=backend python -m app.rag.portal_lifeos_import \
+  /private/path/lifeos-vitalis.json vault
+```
+
+В RAG попадают только опубликованные медицинские статьи по неврологии и
+нейрохирургии с рецензентом, датой проверки и HTTPS-источниками. Сырые записи потока
+`science-neuro` остаются в manifest как `needs_medical_review` и не индексируются.
+
+## Синхронизация отдельного Obsidian-vault
 
 ```bash
 PYTHONPATH=backend python -m app.rag.lifeos_import \
@@ -65,8 +92,16 @@ PYTHONPATH=backend python -m app.rag.lifeos_import \
 ## Проверка
 
 ```bash
-PYTHONPATH=backend python -m unittest backend/tests/test_lifeos_import.py -v
+PYTHONPATH=backend python -m unittest \
+  backend/tests/test_lifeos_import.py \
+  backend/tests/test_portal_lifeos_import.py -v
 ```
 
 До production проверяется manifest, контрольный клинический вопрос, отсутствие
 конфликта с официальной КР и корректное отображение происхождения источника.
+
+Локальная контрольная проверка 2026-11-07: экспортировано и импортировано 10/10
+опубликованных рецензированных статей, отклонено 0. Поиск и карточка проверены по
+мигрени, реабилитации после ишемического инсульта и ботулинотерапии при
+орофациальной боли. Это результат локальной заполненной базы портала; записи
+фактической production-БД подтверждаются только отдельным read-only экспортом на VPS.

@@ -144,6 +144,18 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["search"]["web_disabled"])
         self.assertEqual(result["search"]["evidence_status"], "limited")
 
+    async def test_explicit_mkb_is_included_in_local_rag_lookup(self):
+        with (
+            patch.object(self.rag, "search", return_value=[]) as search,
+            patch("app.services.ask.web_search", new_callable=AsyncMock) as web,
+        ):
+            await self.service.ask(
+                "Лечение мигрени", mode="rf", use_web=False, mkb="G43"
+            )
+
+        web.assert_not_called()
+        search.assert_called_once_with("Лечение мигрени G43", k=6)
+
     async def test_official_local_full_text_satisfies_rf_evidence_gate(self):
         vault = self.root / "vault"
         vault.mkdir(parents=True, exist_ok=True)

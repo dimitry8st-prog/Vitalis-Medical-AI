@@ -32,7 +32,7 @@ PYTHONPATH=backend python backend/scripts/production_gate.py \
   --env-file /root/.config/vitalis-ru/python.env \
   --clinical-report /private/path/clinical-report.json \
   --variant candidate \
-  --lifeos-manifest vault/generated/lifeos/manifest.json
+  --lifeos-manifest vault/generated/lifeos/portal/manifest.json
 ```
 
 Команда не выводит секреты. Она блокирует выпуск при неполной базе КР, небезопасных

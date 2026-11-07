@@ -282,9 +282,13 @@ class AskService:
                 use_web=use_web,
             )
 
-        rag_raw = self.rag.search(question, k=6)
+        # The explicit ICD code is a trusted, schema-validated retrieval signal.
+        # Include it in local lookup so that an official guideline card is not
+        # displaced by several similarly worded secondary Life-OS chunks.
+        rag_query = f"{question} {mkb}" if mkb else question
+        rag_raw = self.rag.search(rag_query, k=6)
         rag_hits = self._annotate_rag_age(rag_raw)
-        relevant_rag = self._filter_relevant_rag(question, rag_hits)
+        relevant_rag = self._filter_relevant_rag(rag_query, rag_hits)
         # FAQ-файл не должен становиться «клиническим» источником лечения
         relevant_rag = [
             h for h in relevant_rag

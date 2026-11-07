@@ -118,6 +118,45 @@ class ProductionGateTests(unittest.TestCase):
             self.assertTrue(any("EVIDENCE_GATE_MODE" in error for error in errors))
             self.assertTrue(any("release_gate_passed" in error for error in errors))
 
+    def test_lifeos_rejections_or_missing_output_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault, env, report = self._fixture(root)
+            lifeos_dir = vault / "generated/lifeos/portal"
+            lifeos_dir.mkdir(parents=True)
+            manifest_path = lifeos_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "automatic_ingestion": False,
+                        "imported": 1,
+                        "rejected": [{"record": "bad", "reason": "synthetic"}],
+                        "records": [
+                            {
+                                "source_id": "portal-article-test",
+                                "content_scope": "reviewed_excerpt",
+                                "reviewed_by": "Test reviewer",
+                                "reviewed_at": "2026-11-07T10:00:00+00:00",
+                                "source_sha256": "a" * 64,
+                                "source_url": "https://st8dom.ru/materials/test/",
+                                "output": "portal-article-test.md",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            errors = run_gate(
+                vault=vault,
+                env_file=env,
+                clinical_report=report,
+                variant="candidate",
+                expected_fulltexts=1,
+                lifeos_manifest=manifest_path,
+            )
+            self.assertTrue(any("отклонённые записи" in error for error in errors))
+            self.assertTrue(any("локальный Markdown" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
