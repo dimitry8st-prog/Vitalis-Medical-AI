@@ -133,7 +133,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
     <div class="workspace-switch" role="tablist" aria-label="Режим работы Vitalis">
       <button type="button" role="tab" aria-selected="true" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинические рекомендации</button>
       <button type="button" role="tab" aria-selected="false" id="workspaceMedical" onclick="setWorkspace('medical')">Медицинский PDF</button>
-      <button type="button" role="tab" aria-selected="false" id="workspaceInsurance" onclick="setWorkspace('insurance')">Страховой полис</button>
+      <button type="button" role="tab" aria-selected="false" id="workspaceInsurance" onclick="setWorkspace('insurance')">Страховой договор / полис</button>
     </div>
     <div id="clinicalTool">
       <h1>Поиск по клиническим рекомендациям</h1>
@@ -292,7 +292,7 @@ function updateDocumentMode(){
     ? 'Выберите страховой договор или полис в PDF'
     : 'Выберите медицинский PDF';
   document.getElementById('documentAnalyzeBtn').textContent = insurance
-    ? 'Проверить страховой полис'
+    ? 'Проверить договор / полис'
     : 'Разобрать медицинский документ';
   if(!documentSessionId || documentSessionKind !== kind){
     document.getElementById('documentEmpty').textContent = insurance

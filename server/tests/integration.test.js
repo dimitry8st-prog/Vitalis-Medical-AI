@@ -41,7 +41,7 @@ test('cabinet has no analytics or third-party assets and forbids caching', async
     assert.match(text, /renderMedications/);
     assert.match(text, /Клинические рекомендации/);
     assert.match(text, /Медицинский PDF/);
-    assert.match(text, /Страховой полис/);
+    assert.match(text, /Страховой договор \/ полис/);
   }
 });
 
@@ -90,7 +90,7 @@ test('landing describes the implemented scope and strict knowledge boundary', as
   assert.equal(response.status, 200);
   assert.match(text, /Поиск по клиническим рекомендациям/);
   assert.match(text, /Разбор медицинского PDF/);
-  assert.match(text, /Разбор страхового полиса/);
+  assert.match(text, /Разбор страхового договора \/ полиса/);
   assert.match(text, /только проверенные полные тексты клинических рекомендаций/i);
   assert.match(text, /Препараты и дозировки/);
   assert.match(text, /страница и дата проверки/i);

@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vitalis — там где понимание становится практикой, а знания — стандартом</title>
-<meta name="description" content="Vitalis — закрытый пилот справочной медицинской системы: поиск по полным клиническим рекомендациям, разбор обезличенных медицинских PDF и страховых полисов.">
+<meta name="description" content="Vitalis — закрытый пилот справочной медицинской системы: поиск по полным клиническим рекомендациям, разбор обезличенных медицинских PDF, страховых договоров и полисов.">
 <meta property="og:title" content="Vitalis — там где понимание становится практикой, а знания — стандартом">
-<meta property="og:description" content="Проверяемые клинические ответы по полным рекомендациям, разбор обезличенных медицинских PDF и страховых полисов.">
+<meta property="og:description" content="Проверяемые клинические ответы по полным рекомендациям, разбор обезличенных медицинских PDF, страховых договоров и полисов.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230A1628'/><path d='M10 22L16 10L22 22' fill='none' stroke='%2310B981' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='16' cy='22' r='2' fill='%2310B981'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -368,7 +368,7 @@ footer a:hover{color:#fff;}
     <div>
       <div class="ey rv" style="color:var(--em);">Закрытый пилот для врачей</div>
       <h1 class="rv">Vitalis<br><em>Там где понимание становится практикой, а знания — стандартом</em></h1>
-      <p class="hero-sub rv rv-1">Vitalis ищет только по проверенным полным текстам клинических рекомендаций, показывает источник и страницу, а также отдельно разбирает заранее обезличенные медицинские PDF и страховые полисы.</p>
+      <p class="hero-sub rv rv-1">Vitalis ищет только по проверенным полным текстам клинических рекомендаций, показывает источник и страницу, а также отдельно разбирает заранее обезличенные медицинские PDF, страховые договоры и полисы.</p>
       <div class="hero-badges rv rv-1">
         <span class="hero-badge"><b>РФ</b> · полные КР</span>
         <span class="hero-badge"><b>Мир</b> · отдельный контур</span>
@@ -400,7 +400,7 @@ footer a:hover{color:#fff;}
     <div class="cap-g">
       <div class="cap rv"><div class="cap-ic">🩺</div><h3>Поиск по клиническим рекомендациям</h3><p class="desc">Запрос может быть диагнозом, кодом МКБ или клиническим вопросом. В ответ попадают только проверенные фрагменты полных рекомендаций с источником и страницей.</p><div class="cap-ex">Что указано в действующей КР по профилактике мигрени? · G43</div></div>
       <div class="cap rv rv-1"><div class="cap-ic">📄</div><h3>Разбор медицинского PDF</h3><p class="desc">Vitalis извлекает текст по страницам, удаляет распространённые идентификаторы и отвечает только по загруженному документу. PDF не становится частью RAG.</p><div class="cap-ex">Какие обследования и ограничения прямо указаны в документе?</div></div>
-      <div class="cap rv rv-2"><div class="cap-ic">🛡️</div><h3>Разбор страхового полиса</h3><p class="desc">Система выделяет тип страхования, покрытие, исключения, лимиты и порядок обращения. При отсутствии условий ищет общую справку только на официальном сайте распознанного страховщика.</p><div class="cap-ex">Какой это тип страховки и что входит в покрытие?</div></div>
+      <div class="cap rv rv-2"><div class="cap-ic">🛡️</div><h3>Разбор страхового договора / полиса</h3><p class="desc">Система выделяет тип страхования, покрытие, исключения, лимиты и порядок обращения. При отсутствии условий ищет общую справку только на официальном сайте распознанного страховщика.</p><div class="cap-ex">Какой это тип страховки и что входит в покрытие?</div></div>
     </div>
   </div>
 </section>
@@ -415,7 +415,7 @@ footer a:hover{color:#fff;}
       <div class="ps-row"><div class="ps-ic bad">✕</div><div class="ps-t"><h4>В PDF могут быть ПД и активное содержимое</h4><p>Документ нельзя автоматически считать безопасным</p></div><div class="ps-ar">→</div><div class="ps-t"><h4 style="color:var(--em)">Проверка до анализа</h4><p>Ограничения PDF, очистка идентификаторов и блокировка подозрительного текста</p></div></div>
     </div>
     <div class="steps rv">
-      <div class="stp"><div class="stp-n">1</div><h3>Выберите режим</h3><p>Клинический поиск, медицинский PDF или страховой полис.</p><span class="stp-con"></span></div>
+      <div class="stp"><div class="stp-n">1</div><h3>Выберите режим</h3><p>Клинический поиск, медицинский PDF или страховой договор / полис.</p><span class="stp-con"></span></div>
       <div class="stp"><div class="stp-n">2</div><h3>Vitalis проверяет границы</h3><p>Допуск источника, полный текст, страницы, безопасность PDF и признаки ПД.</p><span class="stp-con"></span></div>
       <div class="stp"><div class="stp-n">3</div><h3>Получите проверяемый ответ</h3><p>Ответ содержит доказательства и ограничения; при нехватке источника система останавливается.</p></div>
     </div>
@@ -556,7 +556,7 @@ footer a:hover{color:#fff;}
         <div class="pr-tier">Страховые документы</div>
         <div class="pr-name">MVP V1</div>
         <div class="pr-price">13<small> доменов</small></div>
-        <p class="pr-desc">Разбор полиса и ограниченный fallback на официальные сайты страховщиков.</p>
+        <p class="pr-desc">Разбор договора или полиса и ограниченный fallback на официальные сайты страховщиков.</p>
         <ul class="pr-ft"><li>Тип и страховщик</li><li>Покрытие и исключения</li><li>Лимиты и порядок обращения</li><li>Сайт отделён от условий договора</li></ul>
         <a href="/app" class="btn btn-dk">Проверить PDF</a>
       </div>
@@ -607,7 +607,7 @@ footer a:hover{color:#fff;}
     <div class="faq-i rv"><button class="faq-q">Vitalis может поставить диагноз пациенту?<span class="plus">+</span></button><div class="faq-an"><p>Нет. Vitalis предоставляет справочную информацию и не заменяет консультацию врача. Окончательное клиническое решение всегда за врачом.</p></div></div>
     <div class="faq-i rv"><button class="faq-q">Какие источники допускаются в RAG?<span class="plus">+</span></button><div class="faq-an"><p>Только проверенные полные тексты клинических рекомендаций. Статьи портала, новости, обзоры, заметки Life-OS и карточки метаданных не используются как медицинские доказательства.</p></div></div>
     <div class="faq-i rv"><button class="faq-q">Можно ли загрузить медицинский документ?<span class="plus">+</span></button><div class="faq-an"><p>Да, если PDF синтетический или заранее обезличенный и содержит текстовый слой. Он анализируется во временной сессии, не добавляется в RAG и может быть удалён вручную.</p></div></div>
-    <div class="faq-i rv"><button class="faq-q">Что умеет режим страхового полиса?<span class="plus">+</span></button><div class="faq-an"><p>Он выделяет тип страховки, покрытие, исключения, лимиты и порядок обращения. Если покрытия в договоре нет, общая справка ищется только на официальном домене распознанной страховой компании и показывается отдельно.</p></div></div>
+    <div class="faq-i rv"><button class="faq-q">Что умеет режим страхового договора / полиса?<span class="plus">+</span></button><div class="faq-an"><p>Он выделяет тип страховки, покрытие, исключения, лимиты и порядок обращения. Если покрытия в договоре нет, общая справка ищется только на официальном домене распознанной страховой компании и показывается отдельно.</p></div></div>
     <div class="faq-i rv"><button class="faq-q">Какие языки поддерживает платформа?<span class="plus">+</span></button><div class="faq-an"><p>Интерфейс и итоговые ответы — на русском. Международный контур может обрабатывать официальные англоязычные руководства, не смешивая их с российским контуром.</p></div></div>
     <div class="faq-i rv"><button class="faq-q">Можно ли пользоваться сервисом публично?<span class="plus">+</span></button><div class="faq-an"><p>Пока нет. Vitalis находится в закрытом пилоте для проверки источников, клинической точности, резервного восстановления и эксплуатационных ограничений.</p></div></div>
     <div class="faq-i rv"><button class="faq-q">Как обрабатываются персональные данные?<span class="plus">+</span></button><div class="faq-an"><p>Не вводите реальные идентификаторы пациента. Vitalis удаляет распространённые признаки ПД и блокирует внешний вызов при остаточном риске, но это техническое ограничение не заменяет юридическую и организационную оценку обработки данных.</p></div></div>
@@ -623,7 +623,7 @@ footer a:hover{color:#fff;}
         <div class="fg"><label>Имя</label><input type="text" id="vn" placeholder="Как к вам обращаться"><div class="err">Укажите имя</div></div>
         <div class="fg"><label>Email</label><input type="email" id="ve" placeholder="you@clinic.ru"><div class="err">Укажите корректный email</div></div>
         <div class="fg"><label>Кто вы</label><select id="vr"><option value="">Выберите</option><option>Студент</option><option>Ординатор</option><option>Практикующий врач</option><option>Руководитель клиники</option><option>Представитель вуза</option><option>Другое</option></select><div class="err">Выберите роль</div></div>
-        <div class="fg"><label>Интересующий режим</label><select id="vt"><option value="">Выберите</option><option>Поиск по клиническим рекомендациям</option><option>Разбор медицинского PDF</option><option>Разбор страхового полиса</option><option>Комплексная проверка пилота</option><option>Не определились</option></select></div>
+        <div class="fg"><label>Интересующий режим</label><select id="vt"><option value="">Выберите</option><option>Поиск по клиническим рекомендациям</option><option>Разбор медицинского PDF</option><option>Разбор страхового договора / полиса</option><option>Комплексная проверка пилота</option><option>Не определились</option></select></div>
         <div class="fg"><label>Комментарий <span style="color:var(--slate);font-weight:400">(необязательно)</span></label><textarea id="vm" placeholder="Какие протоколы или нозологии интересуют?"></textarea></div>
         <button class="btn btn-em" style="width:100%" id="vBtn" onclick="vS()">Отправить заявку</button>
         <p id="vApiErr" style="display:none;color:var(--coral);font-size:13px;margin-top:10px"></p>
