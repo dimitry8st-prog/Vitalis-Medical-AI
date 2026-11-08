@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from app.rag.source_registry import load_registry, validate_registry
+from app.services.medication_card import STATUS_CHECK_MAX_AGE_DAYS
 
 
 def _load_json(path: Path, label: str, errors: list[str]) -> dict[str, Any]:
@@ -43,6 +45,23 @@ def _validate_fulltexts(vault: Path, expected: int, errors: list[str]) -> None:
         identifiers.add(external_id)
         if record.get("content_scope") != "official_full_text_extracted":
             errors.append(f"КР РФ {external_id}: неверный content_scope")
+        if record.get("guideline_status") != "active":
+            errors.append(f"КР РФ {external_id}: версия не подтверждена как действующая")
+        if not record.get("source_version"):
+            errors.append(f"КР РФ {external_id}: отсутствует source_version")
+        checked_raw = str(record.get("current_version_checked_at") or "")[:10]
+        try:
+            checked_at = date.fromisoformat(checked_raw)
+        except ValueError:
+            errors.append(
+                f"КР РФ {external_id}: отсутствует дата проверки действующей версии"
+            )
+        else:
+            check_age = (date.today() - checked_at).days
+            if check_age < -1 or check_age > STATUS_CHECK_MAX_AGE_DAYS:
+                errors.append(
+                    f"КР РФ {external_id}: проверка действующей версии просрочена"
+                )
         if not re.fullmatch(r"[0-9a-f]{64}", str(record.get("sha256") or "")):
             errors.append(f"КР РФ {external_id}: отсутствует SHA-256")
         try:

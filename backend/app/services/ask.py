@@ -16,6 +16,7 @@ from app.rag.source_policy import is_russian_official
 from app.rag.vault import VaultRAG
 from app.rag.web_search import web_search
 from app.services.citation_guard import guard_clinical_payload
+from app.services.medication_card import build_medication_card
 from app.services.routing import canned_answer, classify_intent, is_nonclinical
 
 DISCLAIMER = "Информация носит справочный характер. Решение принимает лечащий врач."
@@ -73,6 +74,21 @@ STRICT_FRESHNESS = """
 6. Не выдумывай названия документов, рекомендации, дозировки, ссылки и даты.
 """
 
+MEDICATION_RULES = """
+# ЛЕКАРСТВЕННАЯ ТЕРАПИЯ И ДОЗИРОВКИ
+1. Препарат, разовую/суточную дозу, путь введения, частоту, длительность и условия
+   применения указывай только когда они буквально присутствуют в переданном фрагменте
+   полного текста действующей клинической рекомендации.
+2. Не рассчитывай дозу, не пересчитывай единицы, не дополняй режим из памяти и не
+   объединяй элементы режима из разных источников или разных групп пациентов.
+3. Рядом с режимом сохраняй группу пациентов/показание, страницу, версию, год и URL,
+   если эти сведения есть в контексте.
+4. При расхождении документов показывай режимы раздельно по юрисдикциям и версиям;
+   не усредняй их.
+5. Если действующая версия или точный фрагмент не подтверждены, напиши, что дозировка
+   не показана. Карточка препаратов формируется отдельно только из дословных фрагментов.
+"""
+
 RF_FRESHNESS = """
 # АКТУАЛЬНОСТЬ — российский контур
 1. Документ старше 5 лет требует проверки статуса и наличия новой версии. Не считай его
@@ -119,6 +135,7 @@ RF_SYSTEM = f"""Ты — Система Vitalis, российский конту
 {IDENTITY_RULES}
 {ROUTING_LOGIC}
 {RF_FRESHNESS}
+{MEDICATION_RULES}
 
 # ФОРМАТ
 Обязательная структура медицинского ответа:
@@ -164,6 +181,7 @@ INTL_SYSTEM = f"""Ты — Система Vitalis, международный к
 {IDENTITY_RULES}
 {ROUTING_LOGIC}
 {STRICT_FRESHNESS}
+{MEDICATION_RULES}
 
 # ФОРМАТ
 1. «Краткий ответ» — 2–5 предложений по вопросу.
@@ -284,6 +302,11 @@ class AskService:
         # the strongest available retrieval signal.
         rag_query = f"{question} {mkb}" if mkb else question
         rag_raw = self.rag.search(rag_query, k=6)
+        medication_rag_raw = self.rag.search(
+            f"{rag_query} лекарственная терапия препарат дозировка доза путь введения",
+            k=8,
+        )
+        rag_raw = _merge_rag_hits(rag_raw, medication_rag_raw)
         rag_hits = self._annotate_rag_age(rag_raw)
         relevant_rag = self._filter_relevant_rag(rag_query, rag_hits)
         # FAQ-файл не должен становиться «клиническим» источником лечения
@@ -926,7 +949,9 @@ class AskService:
             f"{mkb_line}Клинический вопрос врача:\n{question}\n\n"
             f"{context}\n\n"
             "Ответь как Система Vitalis. Не упоминай модели ИИ. "
-            "У каждого источника указывай реальный год. Не выдумывай даты."
+            "У каждого источника указывай реальный год. Не выдумывай даты. "
+            "Не пересчитывай и не достраивай лекарственные режимы: точная дозировка "
+            "допустима только вместе с дословной опорой, страницей и версией КР."
         )
 
     @staticmethod
@@ -951,6 +976,16 @@ class AskService:
 
         rf_sections = _extract_sections((rf or {}).get("content") or "")
         intl_sections = _extract_sections((intl or {}).get("content") or "")
+        rf_medications = build_medication_card(
+            rag_hits,
+            web_hits,
+            lang="ru",
+        )
+        intl_medications = build_medication_card(
+            rag_hits,
+            web_hits,
+            lang="en",
+        )
 
         def rag_source_priority(hit: dict[str, Any]) -> int:
             scope = str((hit.get("meta") or {}).get("content_scope") or "")
@@ -1038,12 +1073,14 @@ class AskService:
                     "label": "РФ · рекомендации",
                     "content": (rf or {}).get("content", ""),
                     "sections": rf_sections,
+                    "medications": rf_medications,
                     "sources": vault_sources + rf_web_sources,
                 },
                 "intl": {
                     "label": "Международные · рекомендации",
                     "content": (intl or {}).get("content", ""),
                     "sections": intl_sections,
+                    "medications": intl_medications,
                     "sources": [s for s in web_sources if s.get("lang") == "en"]
                     or web_sources[:4],
                 },
@@ -1055,6 +1092,19 @@ def _truthy(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().casefold() in {"true", "yes", "1", "да"}
+
+
+def _merge_rag_hits(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups:
+        for hit in group:
+            key = str(hit.get("id") or f"{hit.get('path')}|{hit.get('text')}")
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(hit)
+    return merged
 
 
 def _int_or_none(value: Any) -> int | None:

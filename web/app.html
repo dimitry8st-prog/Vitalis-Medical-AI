@@ -62,6 +62,18 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .sec ul{margin:0;padding-left:18px}
 .sec li{font-size:13.5px;color:var(--navy);line-height:1.55;margin-bottom:6px}
 .sec .body{font-size:13.5px;color:var(--slate);white-space:pre-wrap;line-height:1.55}
+.med-card{padding:15px;border-radius:14px;border:1px solid rgba(16,185,129,.28);background:rgba(16,185,129,.055);margin-bottom:14px}
+.med-card.blocked{border-color:rgba(245,158,11,.38);background:rgba(245,158,11,.065)}
+.med-card h4{font-size:14px;margin-bottom:4px}
+.med-asof{font-family:var(--mn);font-size:10.5px;color:var(--slate);margin-bottom:10px}
+.med-message{font-size:12.5px;color:var(--slate);line-height:1.45}
+.med-item{padding:12px 0;border-top:1px solid var(--line)}
+.med-item:first-of-type{margin-top:10px}
+.med-regimen{font-size:13.5px;line-height:1.55;color:var(--navy);font-weight:600}
+.med-doses{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.med-dose{font-family:var(--mn);font-size:10.5px;padding:4px 7px;border-radius:7px;background:#fff;border:1px solid rgba(16,185,129,.3);color:#047857}
+.med-source{font-size:11.5px;color:var(--slate);line-height:1.45}
+.med-source a{color:#0369a1;text-decoration:underline;text-underline-offset:2px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 .dot.b{background:var(--blue)}.dot.p{background:var(--purple)}
 .src{margin-top:16px}
@@ -183,10 +195,12 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
         </div>
         <div class="pb">
           <div class="pane active" id="pane-rf">
+            <div id="rfMedications"></div>
             <div id="rfSections"></div>
             <div class="src" id="rfSrc"></div>
           </div>
           <div class="pane" id="pane-intl">
+            <div id="intlMedications"></div>
             <div id="intlSections"></div>
             <div class="src" id="intlSrc"></div>
           </div>
@@ -365,6 +379,88 @@ function renderSections(containerId, sections, fallbackContent){
   });
 }
 
+function formatIsoDate(value){
+  if(!value) return 'дата не указана';
+  const parts = String(value).slice(0,10).split('-');
+  return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : String(value);
+}
+
+function renderMedications(containerId, medications){
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  if(!medications) return;
+  const box = document.createElement('section');
+  const verified = medications.status === 'verified';
+  box.className = 'med-card' + (verified ? '' : ' blocked');
+
+  const heading = document.createElement('h4');
+  heading.textContent = '💊 Препараты и дозировки по клинической рекомендации';
+  box.appendChild(heading);
+  const asOf = document.createElement('div');
+  asOf.className = 'med-asof';
+  asOf.textContent = verified
+    ? `По состоянию на ${formatIsoDate(medications.as_of)} · версия КР подтверждена`
+    : `Проверка на ${formatIsoDate(medications.as_of)} · точная доза не показана`;
+  box.appendChild(asOf);
+
+  (medications.items || []).forEach(item=>{
+    const row = document.createElement('article');
+    row.className = 'med-item';
+    const regimen = document.createElement('div');
+    regimen.className = 'med-regimen';
+    regimen.textContent = item.regimen || item.evidence_quote || '';
+    row.appendChild(regimen);
+
+    if(item.doses && item.doses.length){
+      const doses = document.createElement('div');
+      doses.className = 'med-doses';
+      item.doses.forEach(value=>{
+        const chip = document.createElement('span');
+        chip.className = 'med-dose';
+        chip.textContent = value;
+        doses.appendChild(chip);
+      });
+      (item.routes || []).forEach(value=>{
+        const chip = document.createElement('span');
+        chip.className = 'med-dose';
+        chip.textContent = value;
+        doses.appendChild(chip);
+      });
+      row.appendChild(doses);
+    }
+
+    const source = document.createElement('div');
+    source.className = 'med-source';
+    const details = [
+      item.source_title,
+      item.source_year,
+      item.source_version ? `версия ${item.source_version}` : null,
+      item.source_record_id ? `КР ${item.source_record_id}` : null,
+      item.page ? `стр. ${item.page}` : null,
+      item.version_checked_at ? `статус проверен ${formatIsoDate(item.version_checked_at)}` : null,
+    ].filter(Boolean).join(' · ');
+    const url = safeExternalUrl(item.source_url);
+    if(url){
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = details;
+      source.appendChild(link);
+    }else{
+      source.textContent = details;
+    }
+    row.appendChild(source);
+    box.appendChild(row);
+  });
+
+  const message = document.createElement('div');
+  message.className = 'med-message';
+  message.textContent = medications.message || '';
+  box.appendChild(message);
+  container.appendChild(box);
+}
+
 function renderSources(containerId, sources, label){
   const src = document.getElementById(containerId);
   src.innerHTML = `<h5>${label}</h5>`;
@@ -438,6 +534,8 @@ function render(data){
     meta.appendChild(chip);
   });
 
+  renderMedications('rfMedications', c.tabs.rf && c.tabs.rf.medications);
+  renderMedications('intlMedications', c.tabs.intl && c.tabs.intl.medications);
   renderSections('rfSections', c.tabs.rf && c.tabs.rf.sections, c.tabs.rf && c.tabs.rf.content);
   renderSections('intlSections', c.tabs.intl && c.tabs.intl.sections, c.tabs.intl && c.tabs.intl.content);
   renderSources('rfSrc', c.tabs.rf && c.tabs.rf.sources, 'Источники · РФ');

@@ -101,6 +101,9 @@ class MinzdravFullTextTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("content_scope: \"official_full_text_extracted\"", rendered)
         self.assertIn("full_text_checked: true", rendered)
+        self.assertIn('guideline_status: "active"', rendered)
+        self.assertIn('current_version_checked_at: "2026-11-07"', rendered)
+        self.assertIn('source_version: "295_4"', rendered)
         self.assertIn("## Страница 1", rendered)
         self.assertIn("full_text_sha256", rendered)
 
@@ -125,6 +128,11 @@ class MinzdravFullTextTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(output.is_file())
             manifest = json.loads((output.parent / "manifest.json").read_text())
             self.assertEqual(manifest["sync_status"], "complete")
+            self.assertEqual(manifest["records"][0]["guideline_status"], "active")
+            self.assertEqual(
+                manifest["records"][0]["current_version_checked_at"],
+                "2026-11-07",
+            )
 
     async def test_partial_sync_preserves_previous_good_document(self):
         with tempfile.TemporaryDirectory() as directory:

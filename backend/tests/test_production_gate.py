@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 from scripts.production_gate import run_gate
@@ -50,6 +51,9 @@ class ProductionGateTests(unittest.TestCase):
             "records": [
                 {
                     "external_id": "295_4",
+                    "source_version": "2026",
+                    "guideline_status": "active",
+                    "current_version_checked_at": date.today().isoformat(),
                     "content_scope": "official_full_text_extracted",
                     "sha256": "a" * 64,
                     "page_count": 92,
@@ -156,6 +160,30 @@ class ProductionGateTests(unittest.TestCase):
             )
             self.assertTrue(
                 any("статьи портала не допускаются" in error for error in errors)
+            )
+
+    def test_stale_guideline_version_check_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault, env, report = self._fixture(root)
+            manifest_path = vault / "generated/guidelines/rf/manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["records"][0]["current_version_checked_at"] = (
+                date.today() - timedelta(days=46)
+            ).isoformat()
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            errors = run_gate(
+                vault=vault,
+                env_file=env,
+                clinical_report=report,
+                variant="candidate",
+                expected_fulltexts=1,
+                lifeos_manifest=None,
+            )
+
+            self.assertTrue(
+                any("проверка действующей версии просрочена" in error for error in errors)
             )
 
     def test_lifeos_candidate_inventory_does_not_change_candidate_statuses(self):

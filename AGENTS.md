@@ -60,6 +60,11 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 - Never write from Vitalis into the portal or Life-OS database.
 - Never treat metadata, a search snippet, or a portal article as full guideline text.
 - Exact doses require literal support in a retrieved, verified guideline excerpt.
+- The clinical card must show medication regimens only as literal excerpts from a
+  guideline whose current version was confirmed within the last 45 days. Every row
+  includes the source version, PDF page or official HTML locator, official URL, and
+  version-check date. If any gate fails, Vitalis hides the dose instead of completing
+  it from model memory.
 - No automatic publication, candidate rejection, or ingestion from Life-OS.
 
 ## Resume checklist

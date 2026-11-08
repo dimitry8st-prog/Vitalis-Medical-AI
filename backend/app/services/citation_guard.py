@@ -10,8 +10,9 @@ from app.rag.source_policy import is_primary_guideline_source
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}]+", re.IGNORECASE)
 DOSE_RE = re.compile(
     r"(?i)(?<!\w)\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?\s*"
-    r"(?:мг|mg|мкг|mcg|µg|г|g|мл|ml|ед|iu)"
-    r"(?:\s*/\s*(?:сут(?:ки)?|day|день|кг|kg))?\b"
+    r"(?:мг|mg|мкг|mcg|µg|г|g|мл|ml|ед|ме|iu|"
+    r"табл(?:етка|етки|еток)?|капсул(?:а|ы)?)"
+    r"(?:\s*/\s*(?:сут(?:ки)?|day|день|кг|kg|ч|час|hour|мин|min)){0,2}\b"
 )
 UNVERIFIED_URL_MARKER = "[непроверенная ссылка удалена]"
 UNSUPPORTED_DOSE_MARKER = (

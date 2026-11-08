@@ -37,6 +37,8 @@ test('cabinet has no analytics or third-party assets and forbids caching', async
     assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
     assert.match(response.headers.get('content-security-policy'), /connect-src 'self'/);
     assert.doesNotMatch(text, /mc\.yandex\.ru|fonts\.googleapis\.com|webvisor:true/);
+    assert.match(text, /Препараты и дозировки по клинической рекомендации/);
+    assert.match(text, /renderMedications/);
   }
 });
 
@@ -85,6 +87,8 @@ test('landing describes the implemented scope and strict knowledge boundary', as
   assert.match(text, /Разбор медицинского PDF/);
   assert.match(text, /Разбор страхового полиса/);
   assert.match(text, /только проверенные полные тексты клинических рекомендаций/i);
+  assert.match(text, /Препараты и дозировки/);
+  assert.match(text, /страница и дата проверки/i);
   for (const unsupportedClaim of [
     /генерация медицинских статей/i,
     /PubMed/i,

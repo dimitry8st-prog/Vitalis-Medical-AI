@@ -1,7 +1,8 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import httpx
 from app.config import Settings
@@ -163,22 +164,36 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         web.assert_not_called()
-        search.assert_called_once_with("Лечение мигрени G43", k=6)
+        self.assertEqual(
+            search.call_args_list,
+            [
+                call("Лечение мигрени G43", k=6),
+                call(
+                    "Лечение мигрени G43 лекарственная терапия препарат "
+                    "дозировка доза путь введения",
+                    k=8,
+                ),
+            ],
+        )
 
     async def test_official_local_full_text_satisfies_rf_evidence_gate(self):
         vault = self.root / "vault"
         vault.mkdir(parents=True, exist_ok=True)
         url = "https://cr.minzdrav.gov.ru/view-cr/295_4"
+        today = date.today()
         (vault / "migraine.md").write_text(
             "---\n"
             'title: "Мигрень"\n'
             'mkb: "G43"\n'
             'mkb_codes: "G43, G43.0"\n'
-            'year: "2026"\n'
+            f'year: "{today.year}"\n'
             'source: "Минздрав России"\n'
             'jurisdiction: "RU"\n'
             'language: "ru"\n'
             'document_type: "clinical_guideline_full_text"\n'
+            'source_version: "current-test-version"\n'
+            'guideline_status: "active"\n'
+            f'current_version_checked_at: "{today.isoformat()}"\n'
             f'source_url: "{url}"\n'
             f'url: "{url}"\n'
             'specialty_tags: "neurology"\n'
@@ -186,7 +201,9 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             'full_text_checked: true\n'
             'page_count: 92\n'
             'full_text_sha256: "abc123"\n'
-            "---\n\n## Страница 12\n\nДиагностика и лечение мигрени G43.",
+            "---\n\n## Страница 12\n\n"
+            "Диагностика и лечение мигрени G43. Синтетический препарат "
+            "50 мг внутрь 1 раз в сутки.",
             encoding="utf-8",
         )
         self.rag.build()
@@ -213,6 +230,10 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(source["full_text_checked"])
         self.assertEqual(source["page_count"], 92)
         self.assertEqual(source["full_text_sha256"], "abc123")
+        medications = result["card"]["tabs"]["rf"]["medications"]
+        self.assertEqual(medications["status"], "verified")
+        self.assertEqual(medications["items"][0]["doses"], ["50 мг"])
+        self.assertEqual(medications["items"][0]["page"], 12)
 
     def test_mkb_field_accepts_code_but_rejects_free_text(self):
         self.assertEqual(AskRequest(question="Лечение", mkb="I21.9").mkb, "I21.9")
