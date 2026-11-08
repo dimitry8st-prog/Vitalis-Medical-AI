@@ -6,8 +6,9 @@ from app.documents.extractor import (
     extract_pdf,
     validate_upload_metadata,
 )
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf.actions import JavaScript
+from pypdf.generic import ArrayObject, NameObject, TextStringObject
 
 
 def make_text_pdf(lines: list[str]) -> bytes:
@@ -55,6 +56,27 @@ def make_text_pdf(lines: list[str]) -> bytes:
     return bytes(pdf)
 
 
+def make_c2pa_pdf(*, extra_attachment: bool = False) -> bytes:
+    writer = PdfWriter()
+    writer.clone_document_from_reader(
+        PdfReader(BytesIO(make_text_pdf(["Diagnosis: synthetic C2PA test"])))
+    )
+    credential = writer.add_attachment("Content Credentials", b"synthetic-c2pa-manifest")
+    credential.description = TextStringObject("Content Credentials")
+    credential.alternative_name = TextStringObject("Content Credentials")
+    credential.associated_file_relationship = NameObject("/C2PA_Manifest")
+    credential.subtype = NameObject("/application/c2pa")
+    credential.pdf_object[NameObject("/Subtype")] = TextStringObject("application/c2pa")
+    writer.root_object[NameObject("/AF")] = ArrayObject(
+        [credential.pdf_object.indirect_reference]
+    )
+    if extra_attachment:
+        writer.add_attachment("payload.bin", b"not allowed")
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 class DocumentExtractionTests(unittest.TestCase):
     def test_extracts_text_with_page_number(self) -> None:
         data = make_text_pdf(["Diagnosis: synthetic case", "Glucose 5.4 mmol/L"])
@@ -76,6 +98,25 @@ class DocumentExtractionTests(unittest.TestCase):
         writer.write(output)
         with self.assertRaisesRegex(DocumentValidationError, "активное содержимое"):
             extract_pdf(output.getvalue(), max_pages=5, max_chars=10_000)
+
+    def test_allows_strict_c2pa_content_credentials_manifest(self) -> None:
+        result = extract_pdf(make_c2pa_pdf(), max_pages=5, max_chars=10_000)
+        self.assertIn("synthetic C2PA test", result.pages[0].text)
+
+    def test_rejects_ordinary_attachment(self) -> None:
+        writer = PdfWriter()
+        writer.clone_document_from_reader(
+            PdfReader(BytesIO(make_text_pdf(["Diagnosis: attachment test"])))
+        )
+        writer.add_attachment("payload.bin", b"not allowed")
+        output = BytesIO()
+        writer.write(output)
+        with self.assertRaisesRegex(DocumentValidationError, "активное содержимое"):
+            extract_pdf(output.getvalue(), max_pages=5, max_chars=10_000)
+
+    def test_rejects_c2pa_manifest_with_extra_attachment(self) -> None:
+        with self.assertRaisesRegex(DocumentValidationError, "активное содержимое"):
+            extract_pdf(make_c2pa_pdf(extra_attachment=True), max_pages=5, max_chars=10_000)
 
     def test_rejects_too_many_pages(self) -> None:
         writer = PdfWriter()
