@@ -16,7 +16,10 @@ from app.rag.source_policy import is_russian_official
 from app.rag.vault import VaultRAG
 from app.rag.web_search import web_search
 from app.services.citation_guard import guard_clinical_payload
-from app.services.medication_card import build_medication_card
+from app.services.medication_card import (
+    build_medication_card,
+    is_current_guideline_metadata,
+)
 from app.services.routing import canned_answer, classify_intent, is_nonclinical
 
 DISCLAIMER = "Информация носит справочный характер. Решение принимает лечащий врач."
@@ -577,7 +580,10 @@ class AskService:
             if (
                 meta.get("content_scope") == "official_full_text_extracted"
                 and _truthy(meta.get("full_text_checked"))
-                and not hit.get("stale")
+                and (
+                    not hit.get("stale")
+                    or is_current_guideline_metadata(meta)
+                )
                 and is_russian_official(source_url)
             ):
                 available.add("ru")

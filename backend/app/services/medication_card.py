@@ -114,6 +114,24 @@ def build_medication_card(
     }
 
 
+def is_current_guideline_metadata(
+    meta: dict[str, Any],
+    *,
+    as_of: date | None = None,
+) -> bool:
+    """Age alone never invalidates a guideline whose active status was rechecked."""
+
+    today = as_of or datetime.now(timezone.utc).date()
+    source = {
+        "guideline_status": meta.get("guideline_status"),
+        "version_checked_at": (
+            meta.get("current_version_checked_at") or meta.get("authorized_at")
+        ),
+        "source_version": meta.get("source_version"),
+    }
+    return _current_source_state(source, today)[0]
+
+
 def _iter_sources(
     rag_hits: list[dict[str, Any]],
     web_hits: list[dict[str, Any]],
@@ -188,8 +206,6 @@ def _iter_sources(
 
 
 def _current_source_state(source: dict[str, Any], today: date) -> tuple[bool, str]:
-    if source.get("stale"):
-        return False, "source_year_stale"
     if str(source.get("guideline_status") or "").casefold() not in {
         "active",
         "current",

@@ -319,6 +319,27 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(missing, ["ru"])
 
+    def test_active_rechecked_old_guideline_satisfies_rf_evidence_gate(self):
+        missing = self.service._missing_required_web(
+            "rf",
+            [],
+            [
+                {
+                    "stale": True,
+                    "meta": {
+                        "source_url": "https://cr.minzdrav.gov.ru/view-cr/295_4",
+                        "content_scope": "official_full_text_extracted",
+                        "full_text_checked": "true",
+                        "source_version": "active-old-version",
+                        "guideline_status": "active",
+                        "current_version_checked_at": date.today().isoformat(),
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(missing, [])
+
 
 class MainApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_api_routes_and_validation_without_external_services(self):

@@ -72,6 +72,20 @@ class MedicationCardTests(unittest.TestCase):
         self.assertEqual(card["status"], "blocked_unconfirmed_current_version")
         self.assertEqual(card["items"], [])
 
+    def test_old_publication_is_allowed_when_active_status_was_rechecked(self):
+        hit = self._rag_hit(year="2018")
+        hit["year"] = 2018
+        hit["stale"] = True
+        card = build_medication_card(
+            [hit],
+            [],
+            lang="ru",
+            as_of=date(2026, 11, 8),
+        )
+
+        self.assertEqual(card["status"], "verified")
+        self.assertEqual(card["items"][0]["doses"], ["50 мг"])
+
     def test_rejects_metadata_card_even_if_it_contains_a_dose(self):
         card = build_medication_card(
             [
