@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-
 CLINICAL_GUIDELINE_DOCUMENT_TYPES = {
     "clinical_guideline_full_text",
 }

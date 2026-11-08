@@ -11,7 +11,6 @@ import numpy as np
 
 from app.rag.eligibility import is_clinical_guideline_meta
 
-
 INDEX_SCHEMA_VERSION = 2
 
 
