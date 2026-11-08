@@ -25,8 +25,11 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 - GitHub CI for PR #17 passed Python, Node, dependency audit, and container smoke.
 - The local seeded portal database exports 10 reviewed articles; Vitalis imports all
   10 with no rejection and exposes them as secondary reviewed Life-OS sources.
-- This local count does not prove which runtime records were added on 2026-11-07;
-  verify those with the same read-only exporter against the VPS database.
+- On 2026-11-08 the production portal deployment completed successfully and created a
+  private mode-600 export at `/srv/st8dom/private/lifeos-vitalis.json`: 10 approved
+  reviewed articles and 10 raw `needs_medical_review` candidates.
+- The 10 raw production candidates must not enter Vitalis until Dmitry completes the
+  medical review and they are published with provenance through the portal workflow.
 - The private production release remains blocked until the official Russian guideline
   manifest is complete (17/17), the reviewed Life-OS export is imported, the clinical
   review report passes, and backup/restore is tested.
@@ -42,8 +45,10 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 
 ## Resume checklist
 
-1. Inspect `st8dom-site` versioned packages and the current portal DB/export.
-2. Import only approved neurology/neurosurgery records into generated Vitalis RAG data.
+1. Review the 10 production `needs_medical_review` candidates in the protected Life-OS
+   workspace; do not approve them automatically.
+2. Import only the 10 already approved neurology/neurosurgery records into generated
+   Vitalis RAG data after the production staging file is made available to Vitalis.
 3. Verify a normal `/ask` request, source provenance, page citations, and strict blocking.
 4. Run all local tests and GitHub CI.
 5. Keep the PR draft until every production gate passes.
