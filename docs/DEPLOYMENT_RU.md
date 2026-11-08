@@ -4,6 +4,9 @@
 
 Private pilot: https://vitalis.st8dom.ru/app. HTTPS and HTTP Basic authentication are enabled by host Caddy. The landing page is at `/`. Login is `dmitry`; the password is stored privately by the operator.
 
+Current branch routing differs from that historical deployment: `/` opens the unified
+three-mode cabinet, `/app` remains an alias, and the project description is at `/about`.
+
 Application baseline: `9cfb784403e8dead895fbae3c6be6cb84fefbe3c` (main). This documentation/configuration commit does not change application logic, prompts, or the INT branch. The existing application still contains both region choices; deployment does not enforce RU-only selection.
 
 This is a historical deployment record, not the current release state. The audited
@@ -33,7 +36,8 @@ These instructions are for a prepared host, not a script to overwrite an existin
 1. Clone the repository, choose the intended commit, and enter the checkout.
 2. Inspect current containers and host ports. Keep other projects running.
 3. Build: `docker compose build`; start and wait for healthy mock services: `docker compose up -d --no-build --wait --wait-timeout 180`.
-4. Verify local Node `/api/health`, Python `/api/ai/health`, and `/app` on `http://127.0.0.1:3080`.
+4. Verify local Node `/api/health`, Python `/api/ai/health`, the unified cabinet `/`,
+   compatibility alias `/app`, and `/about` on `http://127.0.0.1:3080`.
 5. Create the private env file using a hidden prompt, never pasting the key into command text:
 
 ```bash

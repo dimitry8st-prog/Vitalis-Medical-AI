@@ -149,7 +149,10 @@ def render_rag_document(item: dict[str, Any]) -> str:
         "jurisdiction": "RU",
         "language": "ru",
         "document_type": "clinical_guideline_metadata",
-        "source_version": item["external_id"],
+        "source_version": item["source_version"],
+        "source_record_id": item["external_id"],
+        "guideline_status": "active",
+        "current_version_checked_at": item.get("current_version_checked_at", ""),
         "url": item["url"],
         "source_url": item["url"],
         "specialty_tags": " ".join(item["specialty_tags"]),
@@ -191,7 +194,9 @@ def _source_record(
         "document_type": "clinical_guideline_metadata",
         "content_scope": CONTENT_SCOPE,
         "publication_year": item["publication_year"],
-        "source_version": item["external_id"],
+        "source_version": item["source_version"],
+        "guideline_status": "active",
+        "current_version_checked_at": reviewed_at,
         "revision_due": None,
         "checked_at": reviewed_at,
         "status": "approved",
@@ -239,6 +244,7 @@ def sync_portal_guidelines(
 
     expected_files: set[str] = set()
     for item in selected:
+        item = {**item, "current_version_checked_at": reviewed_at}
         name = f"{GENERATED_FILE_PREFIX}{item['external_id']}.md"
         expected_files.add(name)
         (target_dir / name).write_text(render_rag_document(item), encoding="utf-8")

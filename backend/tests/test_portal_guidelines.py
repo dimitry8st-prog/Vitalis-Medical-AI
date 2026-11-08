@@ -67,6 +67,8 @@ class PortalGuidelineImportTests(unittest.TestCase):
             ])
             text = files[0].read_text(encoding="utf-8")
             self.assertIn(f'content_scope: "{CONTENT_SCOPE}"', text)
+            self.assertIn('guideline_status: "active"', text)
+            self.assertIn('current_version_checked_at: "2026-11-01"', text)
             self.assertIn("не является источником утверждений", text)
             registry = json.loads(source_path.read_text(encoding="utf-8"))
             self.assertEqual(len(registry["sources"]), 2)

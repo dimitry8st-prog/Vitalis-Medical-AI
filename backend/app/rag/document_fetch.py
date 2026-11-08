@@ -10,7 +10,7 @@ from app.documents.isolated_parser import extract_pdf_isolated
 from app.documents.models import DocumentPage
 from app.documents.security import scan_untrusted_text
 from app.rag.safe_fetch import fetch_bounded
-from app.rag.source_policy import is_primary_evidence_source
+from app.rag.source_policy import is_primary_guideline_source
 
 
 class _VisibleTextParser(HTMLParser):
@@ -123,7 +123,7 @@ async def enrich_primary_documents(
     candidates = [
         (index, hit)
         for index, hit in enumerate(hits)
-        if is_primary_evidence_source(str(hit.get("url") or ""))
+        if is_primary_guideline_source(str(hit.get("url") or ""))
     ][:max_documents]
 
     async def fetch_one(index: int, hit: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -133,7 +133,7 @@ async def enrich_primary_documents(
         try:
             raw, content_type, final_url, encoding = await fetch_bounded(
                 url,
-                allowed=is_primary_evidence_source,
+                allowed=is_primary_guideline_source,
                 max_bytes=max_bytes,
                 timeout=15,
                 user_agent="Vitalis-Medical-Evidence/1.0",
