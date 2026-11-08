@@ -5,6 +5,19 @@ from pathlib import Path
 from app.rag.vault import VaultRAG
 
 
+def full_guideline(title: str, body: str, *, mkb_codes: str = "") -> str:
+    return (
+        "---\n"
+        f'title: "{title}"\n'
+        f'mkb_codes: "{mkb_codes}"\n'
+        'document_type: "clinical_guideline_full_text"\n'
+        'content_scope: "official_full_text_extracted"\n'
+        "full_text_checked: true\n"
+        "---\n\n"
+        f"{body}"
+    )
+
+
 class VaultRefreshTests(unittest.TestCase):
     def test_frontmatter_decodes_json_escaped_quotes(self):
         meta, _ = VaultRAG._split_frontmatter(
@@ -20,13 +33,15 @@ class VaultRefreshTests(unittest.TestCase):
             index = root / "index"
             vault.mkdir()
             (vault / "first.md").write_text(
-                "---\ntitle: First\n---\n\nFirst document.", encoding="utf-8"
+                full_guideline("First", "## Страница 1\n\nFirst document."),
+                encoding="utf-8",
             )
             first = VaultRAG(vault, index)
             first_count = first.load_or_build()
 
             (vault / "second.md").write_text(
-                "---\ntitle: Second\n---\n\nSecond document.", encoding="utf-8"
+                full_guideline("Second", "## Страница 1\n\nSecond document."),
+                encoding="utf-8",
             )
             second = VaultRAG(vault, index)
             second_count = second.load_or_build()
@@ -52,16 +67,28 @@ class VaultRefreshTests(unittest.TestCase):
             (vault / "secondary.md").write_text(
                 "---\n"
                 "title: \"Общий обзор головной боли\"\n"
+                "document_type: \"reviewed_lifeos_article\"\n"
                 "content_scope: \"reviewed_excerpt\"\n"
                 "---\n\nМигрень и другие состояния.",
                 encoding="utf-8",
             )
             (vault / "official.md").write_text(
-                "---\n"
-                "title: \"Мигрень\"\n"
-                "mkb_codes: \"G43, G43.0\"\n"
-                "content_scope: \"official_full_text_extracted\"\n"
-                "---\n\n## Страница 1\n\nОфициальный текст.",
+                full_guideline(
+                    "Мигрень",
+                    "## Страница 1\n\nДля купирования приступа рассматриваются "
+                    "триптаны. Профилактическая терапия выбирается по частоте "
+                    "приступов.",
+                    mkb_codes="G43, G43.0",
+                ),
+                encoding="utf-8",
+            )
+            (vault / "epilepsy.md").write_text(
+                full_guideline(
+                    "Эпилепсия",
+                    "## Страница 1\n\nДиагностика приступов включает оценку "
+                    "анамнеза и электроэнцефалографию.",
+                    mkb_codes="G40",
+                ),
                 encoding="utf-8",
             )
             rag = VaultRAG(vault, index)
@@ -71,6 +98,34 @@ class VaultRefreshTests(unittest.TestCase):
             self.assertEqual(
                 hits[0]["meta"]["content_scope"], "official_full_text_extracted"
             )
+            free_query_hits = rag.search(
+                "чем купировать приступ и когда нужна профилактическая терапия",
+                k=1,
+            )
+            self.assertEqual(free_query_hits[0]["title"], "Мигрень")
+
+    def test_non_guideline_files_are_preserved_but_never_indexed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            index = root / "index"
+            vault.mkdir()
+            article = vault / "lifeos-article.md"
+            article.write_text(
+                "---\n"
+                'title: "Статья Life-OS"\n'
+                'document_type: "reviewed_lifeos_article"\n'
+                'content_scope: "reviewed_excerpt"\n'
+                "---\n\nНаучно-популярный материал.",
+                encoding="utf-8",
+            )
+
+            rag = VaultRAG(vault, index)
+            self.assertEqual(rag.build(), 0)
+            self.assertTrue(article.exists())
+            self.assertEqual(rag.indexed_files, 0)
+            self.assertEqual(rag.excluded_files, 1)
+            self.assertEqual(rag.search("Статья Life-OS", k=5), [])
 
 
 if __name__ == "__main__":

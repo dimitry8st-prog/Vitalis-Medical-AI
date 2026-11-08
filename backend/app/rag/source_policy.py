@@ -111,6 +111,14 @@ def is_primary_international_source(url: str) -> bool:
     }
 
 
+def is_primary_guideline_source(url: str) -> bool:
+    """Allow clinical evidence only from first-party guideline sources."""
+    host = _host(url)
+    if _matches(host, "cr.minzdrav.gov.ru"):
+        return True
+    return classify_international_source(url)["source_tier"] == "official_guideline"
+
+
 def is_primary_evidence_source(url: str) -> bool:
     """Allow bounded full-text checks only on first-party official sources."""
     return is_russian_official(url) or is_primary_international_source(url)

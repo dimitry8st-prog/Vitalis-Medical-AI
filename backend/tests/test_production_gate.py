@@ -118,7 +118,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertTrue(any("EVIDENCE_GATE_MODE" in error for error in errors))
             self.assertTrue(any("release_gate_passed" in error for error in errors))
 
-    def test_lifeos_rejections_or_missing_output_fail_closed(self):
+    def test_lifeos_article_import_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             vault, env, report = self._fixture(root)
@@ -154,8 +154,40 @@ class ProductionGateTests(unittest.TestCase):
                 expected_fulltexts=1,
                 lifeos_manifest=manifest_path,
             )
-            self.assertTrue(any("отклонённые записи" in error for error in errors))
-            self.assertTrue(any("локальный Markdown" in error for error in errors))
+            self.assertTrue(
+                any("статьи портала не допускаются" in error for error in errors)
+            )
+
+    def test_lifeos_candidate_inventory_does_not_change_candidate_statuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault, env, report = self._fixture(root)
+            manifest_path = root / "lifeos-inventory.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "automatic_ingestion": False,
+                        "imported": 0,
+                        "records": [],
+                        "candidates": [
+                            {
+                                "source_id": "lifeos-material-1",
+                                "review_status": "needs_medical_review",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            errors = run_gate(
+                vault=vault,
+                env_file=env,
+                clinical_report=report,
+                variant="candidate",
+                expected_fulltexts=1,
+                lifeos_manifest=manifest_path,
+            )
+            self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

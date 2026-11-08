@@ -9,6 +9,11 @@ from pathlib import Path
 import faiss
 import numpy as np
 
+from app.rag.eligibility import is_clinical_guideline_meta
+
+
+INDEX_SCHEMA_VERSION = 2
+
 
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-zA-Zа-яА-ЯёЁ0-9]+", text.lower())
@@ -58,10 +63,6 @@ def _source_priority(meta: dict) -> float:
     scope = str(meta.get("content_scope") or "")
     if scope == "official_full_text_extracted":
         return 0.35
-    if scope in {"reviewed_excerpt", "reviewed_full_text"}:
-        return 0.08
-    if scope == "bibliographic_metadata_only":
-        return -0.08
     return 0.0
 
 
@@ -104,16 +105,24 @@ class VaultRAG:
         self.dim = dim
         self.chunks: list[Chunk] = []
         self.index: faiss.IndexFlatIP | None = None
+        self.indexed_files = 0
+        self.excluded_files = 0
 
     def build(self) -> int:
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.chunks = []
+        self.indexed_files = 0
+        self.excluded_files = 0
         vectors: list[np.ndarray] = []
 
         files = sorted(self.vault_dir.rglob("*.md"))
         for fp in files:
             raw = fp.read_text(encoding="utf-8")
             meta, body = self._split_frontmatter(raw)
+            if not is_clinical_guideline_meta(meta):
+                self.excluded_files += 1
+                continue
+            self.indexed_files += 1
             title = meta.get("title") or fp.stem.replace("-", " ")
             parts = self._chunk_text(body, max_len=700)
             for i, part in enumerate(parts):
@@ -152,13 +161,15 @@ class VaultRAG:
         if (
             meta_path.exists()
             and index_path.exists()
-            and manifest.get("schema_version") == 1
+            and manifest.get("schema_version") == INDEX_SCHEMA_VERSION
             and manifest.get("vault_fingerprint") == self._vault_fingerprint()
         ):
             self.chunks = [
                 Chunk(**c) for c in json.loads(meta_path.read_text(encoding="utf-8"))
             ]
             self.index = faiss.read_index(str(index_path))
+            self.indexed_files = int(manifest.get("indexed_files") or 0)
+            self.excluded_files = int(manifest.get("excluded_files") or 0)
             return len(self.chunks)
         return self.build()
 
@@ -177,12 +188,16 @@ class VaultRAG:
             c = self.chunks[i]
             title_terms = _search_terms(c.title)
             title_overlap = len(query_terms & title_terms)
+            text_terms = _search_terms(c.text)
+            text_overlap = len(query_terms & text_terms)
             meta_codes = _mkb_codes(
                 f"{c.meta.get('mkb_codes') or ''} {c.meta.get('mkb') or ''}"
             )
             rank_score = float(score)
             if title_overlap:
                 rank_score += min(1.5, 0.65 * title_overlap)
+            if text_overlap:
+                rank_score += min(1.5, 0.35 * text_overlap)
             if query_codes & meta_codes:
                 rank_score += 2.0
             rank_score += _source_priority(c.meta)
@@ -220,7 +235,10 @@ class VaultRAG:
         manifest_path.write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
+                    "schema_version": INDEX_SCHEMA_VERSION,
+                    "eligibility_policy": "verified_full_clinical_guidelines_only",
+                    "indexed_files": self.indexed_files,
+                    "excluded_files": self.excluded_files,
                     "vault_fingerprint": self._vault_fingerprint(),
                 },
                 ensure_ascii=False,

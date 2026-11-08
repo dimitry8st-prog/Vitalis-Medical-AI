@@ -42,6 +42,9 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "lang": "ru",
                 "year": 2026,
                 "snippet": "Russian evidence",
+                "document_type": "clinical_guideline",
+                "full_text_checked": True,
+                "evidence_excerpt": "Russian evidence from the full guideline",
             },
             {
                 "url": "https://who.int/en-only",
@@ -49,6 +52,9 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "lang": "en",
                 "year": 2026,
                 "snippet": "International evidence",
+                "document_type": "clinical_guideline",
+                "full_text_checked": True,
+                "evidence_excerpt": "International evidence from the full guideline",
             },
         ]
         with patch("app.services.ask.web_search", return_value=rows):
@@ -95,6 +101,9 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "lang": "ru",
                 "year": 2026,
                 "snippet": "Synthetic evidence",
+                "document_type": "clinical_guideline",
+                "full_text_checked": True,
+                "evidence_excerpt": "Synthetic full guideline evidence",
             }
         ]
         with patch("app.services.ask.web_search", return_value=rows) as search:
@@ -169,6 +178,7 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             'source: "Минздрав России"\n'
             'jurisdiction: "RU"\n'
             'language: "ru"\n'
+            'document_type: "clinical_guideline_full_text"\n'
             f'source_url: "{url}"\n'
             f'url: "{url}"\n'
             'specialty_tags: "neurology"\n'
@@ -212,8 +222,8 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def test_card_uses_portal_guideline_title_codes_and_official_url(self):
         hit = {
             "title": "Геморрагический инсульт",
-            "path": "guidelines/rf/minzdrav-523_3.md",
-            "text": "Официальная библиографическая карточка",
+            "path": "generated/guidelines/rf/minzdrav-full-523_3.md",
+            "text": "[Страница 14] Официальный полный текст клинической рекомендации",
             "score": 0.8,
             "year": 2025,
             "stale": False,
@@ -221,7 +231,9 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "mkb": "I60",
                 "mkb_codes": "I60, I61, I62, Q28.2",
                 "url": "https://cr.minzdrav.gov.ru/view-cr/523_3",
-                "content_scope": "bibliographic_metadata_only",
+                "document_type": "clinical_guideline_full_text",
+                "content_scope": "official_full_text_extracted",
+                "full_text_checked": "true",
                 "specialty_tags": "neurology neurosurgery",
             },
         }
@@ -255,7 +267,7 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(card["mkb"], "K64")
         self.assertNotEqual(card["title"], "Геморрой")
 
-    def test_metadata_only_context_is_explicitly_not_clinical_evidence(self):
+    def test_metadata_only_card_is_excluded_from_clinical_rag(self):
         hit = {
             "title": "Мигрень",
             "path": "guidelines/rf/minzdrav-295_4.md",
@@ -263,11 +275,14 @@ class SearchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "score": 0.7,
             "year": 2024,
             "stale": False,
-            "meta": {"content_scope": "bibliographic_metadata_only"},
+            "meta": {
+                "document_type": "clinical_guideline_metadata",
+                "content_scope": "bibliographic_metadata_only",
+            },
         }
-        context = self.service._format_context([hit], [hit], [], False)
-        self.assertIn("ТОЛЬКО МЕТАДАННЫЕ", context)
-        self.assertIn("не подтверждает диагностику", context)
+        self.assertEqual(
+            self.service._filter_relevant_rag("Лечение мигрени", [hit]), []
+        )
 
     def test_unfetched_registry_seed_does_not_satisfy_web_evidence_gate(self):
         missing = self.service._missing_required_web(

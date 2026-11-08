@@ -119,8 +119,8 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <button type="button" id="workspaceDocument" onclick="setWorkspace('document')">Разбор PDF</button>
     </div>
     <div id="clinicalTool">
-      <h1>Клинический запрос</h1>
-      <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
+      <h1>Поиск по клиническим рекомендациям</h1>
+      <p class="sub">Ищите по диагнозу, коду МКБ или произвольному клиническому вопросу. В локальном RAG используются только проверенные полные тексты клинических рекомендаций.</p>
       <div class="controls">
         <select id="mode">
           <option value="both">РФ + международные</option>
@@ -129,10 +129,10 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
         </select>
         <input type="text" id="mkb" placeholder="МКБ (напр. I21)" style="width:140px">
       </div>
-      <p class="hint">Источники старше 5 лет помечаются как устаревшие. При сбое веб-проверки система явно предупреждает об ограниченном режиме.</p>
-      <textarea id="q" placeholder="Например: как лечить перелом позвоночника по актуальным рекомендациям?"></textarea>
+      <p class="hint">Статьи портала, новости, заметки Life‑OS и библиографические карточки не используются как доказательная база. При отсутствии полного текста система сообщает об ограничении.</p>
+      <textarea id="q" placeholder="Диагноз или вопрос, например: диагностика и лечение мигрени по действующим рекомендациям"></textarea>
       <div class="row">
-        <button class="btn" id="askBtn" onclick="ask()">Спросить</button>
+        <button class="btn" id="askBtn" onclick="ask()">Найти в рекомендациях</button>
         <button class="btn btn-gh" type="button" onclick="fillDemo()">Пример ОКС</button>
       </div>
       <div class="status" id="status">Готов к запросу</div>

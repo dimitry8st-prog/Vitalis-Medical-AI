@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from app.rag.source_policy import is_primary_evidence_source
+from app.rag.source_policy import is_primary_guideline_source
 
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}]+", re.IGNORECASE)
 DOSE_RE = re.compile(
@@ -93,7 +93,7 @@ def _supported_doses(
 ) -> set[str]:
     supported: set[str] = set()
     for hit in web_hits:
-        if not hit.get("full_text_checked") or not is_primary_evidence_source(
+        if not hit.get("full_text_checked") or not is_primary_guideline_source(
             str(hit.get("url") or "")
         ):
             continue
@@ -108,7 +108,7 @@ def _supported_doses(
         if (
             meta.get("content_scope") != "official_full_text_extracted"
             or not _truthy(meta.get("full_text_checked"))
-            or not is_primary_evidence_source(source_url)
+            or not is_primary_guideline_source(source_url)
         ):
             continue
         evidence = str(hit.get("text") or "")

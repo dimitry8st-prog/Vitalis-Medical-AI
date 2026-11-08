@@ -68,6 +68,7 @@ def _validate_fulltexts(vault: Path, expected: int, errors: list[str]) -> None:
 
 
 def _validate_lifeos(path: Path | None, errors: list[str]) -> None:
+    """Life-OS may be inventoried, but portal articles must never enter Vitalis RAG."""
     if path is None:
         return
     manifest = _load_json(path, "Life-OS", errors)
@@ -75,33 +76,15 @@ def _validate_lifeos(path: Path | None, errors: list[str]) -> None:
         return
     if manifest.get("automatic_ingestion") is not False:
         errors.append("Life-OS: automatic_ingestion должен быть false")
-    if manifest.get("rejected"):
-        errors.append("Life-OS: export содержит отклонённые записи")
     records = manifest.get("records")
     if not isinstance(records, list):
         errors.append("Life-OS: records должен быть массивом")
         return
-    if not records:
-        errors.append("Life-OS: нет импортированных проверенных материалов")
-    if "imported" in manifest and manifest.get("imported") != len(records):
-        errors.append("Life-OS: imported не совпадает с числом records")
-    for record in records:
-        if not isinstance(record, dict):
-            errors.append("Life-OS: запись manifest должна быть объектом")
-            continue
-        source_id = str(record.get("source_id") or "unknown")
-        if record.get("content_scope") != "reviewed_excerpt":
-            errors.append(f"Life-OS {source_id}: разрешён только reviewed_excerpt")
-        for field in ("reviewed_by", "reviewed_at", "source_sha256", "source_url"):
-            if not record.get(field):
-                errors.append(f"Life-OS {source_id}: отсутствует {field}")
-        if not re.fullmatch(r"[0-9a-f]{64}", str(record.get("source_sha256") or "")):
-            errors.append(f"Life-OS {source_id}: некорректный SHA-256")
-        output_name = str(record.get("output") or "")
-        if not output_name or Path(output_name).name != output_name:
-            errors.append(f"Life-OS {source_id}: некорректное имя output")
-        elif not (path.parent / output_name).is_file():
-            errors.append(f"Life-OS {source_id}: отсутствует локальный Markdown")
+    if records or int(manifest.get("imported") or 0) != 0:
+        errors.append(
+            "Life-OS: статьи портала не допускаются в RAG Vitalis; разрешены только "
+            "проверенные полные тексты клинических рекомендаций"
+        )
 
 
 def _load_env(path: Path, errors: list[str]) -> dict[str, str]:

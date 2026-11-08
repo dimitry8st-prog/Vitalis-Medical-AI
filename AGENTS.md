@@ -6,49 +6,58 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 
 - Vitalis application: `dimitry8st-prog/Vitalis-Medical-AI`.
 - Portal and the actual current Life-OS workspace: `dimitry8st-prog/st8dom-site`.
-- The portal runtime stores Life-OS records in its configured SQLAlchemy database
-  (`DATABASE_URL`; local fallback `instance/site.db`) in `LifeOSMaterial` and stores
-  medically reviewed publications in `Article` plus `ArticleSource`.
-- Versioned Life-OS/editorial material in the portal repository lives in
-  `data/content-packages/` and `obsidian-vault/`.
-- `dimitry8st-prog/Life-Os/data/demo-vault` is only a demonstration vault. Never use
-  it to conclude that the real Life-OS database is empty or that today's materials
-  were not added.
+- The portal runtime stores raw Life-OS records in `LifeOSMaterial` and portal
+  publications in `Article` plus `ArticleSource`.
+- Versioned portal material lives in `st8dom-site/data/content-packages/` and
+  `st8dom-site/obsidian-vault/`.
+- `dimitry8st-prog/Life-Os/data/demo-vault` is only a demonstration vault.
+
+## Non-negotiable Vitalis RAG policy
+
+- Owner decision dated 2026-11-08: Vitalis RAG accepts **only verified full texts of
+  clinical guidelines**.
+- An indexable file must have
+  `document_type=clinical_guideline_full_text`,
+  `content_scope=official_full_text_extracted`, and `full_text_checked=true`.
+- Bibliographic cards may help discover a document, but are not indexed and are not
+  medical evidence.
+- Portal articles, scientific news, reviews, patient materials, Life-OS notes, and raw
+  candidates are portal-only content. They never enter Vitalis RAG, even if published or
+  medically reviewed.
+- Search must work from a free clinical query, a diagnosis, an ICD/MKB code, or their
+  combination. An explicit ICD/MKB code is included in local retrieval ranking.
+- Do not delete or change the review status of Life-OS candidates unless Dmitry asks for
+  that exact action. The 10 production candidates remain unchanged.
 
 ## Current facts
 
-- Dmitry stated that medical materials were added to Life-OS on 2026-11-07.
-- Before reporting import counts, inspect the actual portal database or a controlled
-  export from it, plus versioned portal packages. Do not report only demo-vault counts.
-- Vitalis production work is in draft PR #17 on branch
+- Production portal export on 2026-11-08 previously reported 10 published portal
+  articles and 10 raw `needs_medical_review` candidates.
+- The portal export contract is being narrowed to schema 2: `approved_records` stays
+  empty, portal articles are counted as excluded, and candidates remain inventory only.
+- The repository still contains legacy generated portal-article Markdown files. They are
+  preserved for traceability but index schema 2 excludes them from FAISS.
+- The local workspace currently has 17 official Russian guideline metadata cards and
+  **0/17 extracted full-text Markdown documents**. Therefore a rebuilt strict RAG is
+  intentionally empty until the official PDF sync succeeds.
+- Draft portal article
+  `brain-options-decision-2026-11.json` is marked `workflow_status=review`,
+  `portal_only=true`, and `vitalis_ingest_allowed=false`. It is not published.
+- Vitalis production work remains in draft PR #17 on branch
   `codex/vitalis-lifeos-production`.
-- GitHub CI for PR #17 passed Python, Node, dependency audit, and container smoke.
-- The local seeded portal database exports 10 reviewed articles; Vitalis imports all
-  10 with no rejection and exposes them as secondary reviewed Life-OS sources.
-- On 2026-11-08 the production portal deployment completed successfully and created a
-  private mode-600 export at `/srv/st8dom/private/lifeos-vitalis.json`: 10 approved
-  reviewed articles and 10 raw `needs_medical_review` candidates.
-- The 10 raw production candidates must not enter Vitalis until Dmitry completes the
-  medical review and they are published with provenance through the portal workflow.
-- The private production release remains blocked until the official Russian guideline
-  manifest is complete (17/17), the reviewed Life-OS export is imported, the clinical
-  review report passes, and backup/restore is tested.
 
-## Integration boundary
+## Safety boundary
 
-- Life-OS to Vitalis is one-way and offline: export -> staging -> validation -> RAG.
-- Never write back to the portal database from Vitalis.
-- Import only medically reviewed/published materials with provenance and no personal data.
-- Official clinical guideline full text always outranks a Life-OS article or note.
-- A Life-OS review cannot validate an exact dose unless the retrieved official primary
-  source explicitly contains it.
+- Never write from Vitalis into the portal or Life-OS database.
+- Never treat metadata, a search snippet, or a portal article as full guideline text.
+- Exact doses require literal support in a retrieved, verified guideline excerpt.
+- No automatic publication, candidate rejection, or ingestion from Life-OS.
 
 ## Resume checklist
 
-1. Review the 10 production `needs_medical_review` candidates in the protected Life-OS
-   workspace; do not approve them automatically.
-2. Import only the 10 already approved neurology/neurosurgery records into generated
-   Vitalis RAG data after the production staging file is made available to Vitalis.
-3. Verify a normal `/ask` request, source provenance, page citations, and strict blocking.
-4. Run all local tests and GitHub CI.
-5. Keep the PR draft until every production gate passes.
+1. Complete the official Russian clinical-guideline PDF sync to 17/17.
+2. Rebuild the local RAG and confirm that only verified full guideline files were indexed.
+3. Smoke-test searches by diagnosis, MKB code, and arbitrary clinical question, including
+   page citations and strict blocking when no full text exists.
+4. Run the full Python, Node, audit, and container checks.
+5. Keep PR #17 draft until the clinical release gate and backup/restore drill pass.

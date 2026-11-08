@@ -15,7 +15,7 @@ LLM и заявления о клинической безопасности н�
 |---|---|
 | Код | Python, Node, lint, dependency audit и container smoke зелёные |
 | КР РФ | 17/17 PDF, `sync_status=complete`, SHA-256 и страницы |
-| Life-OS | Только одобренные записи; автоматическая загрузка выключена |
+| Граница знаний | В FAISS только 17/17 проверенных полных КР; статьи портала и Life-OS не индексируются |
 | Privacy | Внешняя обработка документов выключена; персональные данные блокируются |
 | Evidence | `EVIDENCE_GATE_MODE=strict`; неподтверждённые URL и дозы блокируются |
 | Клиническая оценка | 30 синтетических сценариев, слепая оценка врачом, `release_gate_passed=true` |
@@ -31,13 +31,12 @@ PYTHONPATH=backend python backend/scripts/production_gate.py \
   --vault vault \
   --env-file /root/.config/vitalis-ru/python.env \
   --clinical-report /private/path/clinical-report.json \
-  --variant candidate \
-  --lifeos-manifest vault/generated/lifeos/portal/manifest.json
+  --variant candidate
 ```
 
 Команда не выводит секреты. Она блокирует выпуск при неполной базе КР, небезопасных
-production-настройках, некорректном реестре, непроверенном Life-OS manifest или
-непройденной клинической оценке.
+production-настройках, попытке включить статьи Life-OS/портала или непройденной
+клинической оценке.
 
 ## Порядок выкладки
 
