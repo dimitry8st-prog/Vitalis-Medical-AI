@@ -40,9 +40,13 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 - The local workspace currently has 17 official Russian guideline metadata cards and
   **0/17 extracted full-text Markdown documents**. Therefore a rebuilt strict RAG is
   intentionally empty until the official PDF sync succeeds.
-- Draft portal article
-  `brain-options-decision-2026-11.json` is marked `workflow_status=review`,
-  `portal_only=true`, and `vitalis_ingest_allowed=false`. It is not published.
+- Portal article `brain-options-decision-2026-11.json` was published on 2026-11-08,
+  but remains `portal_only=true` and `vitalis_ingest_allowed=false`. Publication does
+  not make it a Vitalis source.
+- A live check on 2026-11-08 found the official Minzdrav PDF service unavailable:
+  guideline `295_4` returned HTTP 500, the public preview remained on document loading,
+  and a second official PDF request timed out. Do not replace the failed PDF sync with
+  metadata cards, cached snippets, or portal text.
 - Vitalis production work remains in draft PR #17 on branch
   `codex/vitalis-lifeos-production`.
 
