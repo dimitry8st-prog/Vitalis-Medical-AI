@@ -89,8 +89,8 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .chip{font-family:var(--mn);font-size:10.5px;padding:4px 8px;border-radius:999px;background:var(--ice);border:1px solid var(--line);color:var(--slate)}
 .hidden{display:none!important}
-.workspace-switch{display:flex;gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
-.workspace-switch button{flex:1;border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer}
+.workspace-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.workspace-switch button{border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer;line-height:1.25}
 .workspace-switch button.active{background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(10,22,40,.16)}
 .upload{display:block;border:1.5px dashed rgba(59,130,246,.35);background:var(--ice);border-radius:14px;padding:16px;margin-bottom:12px}
 .upload input{display:block;width:100%;margin-top:10px}
@@ -107,6 +107,10 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .doc-actions .danger{background:#fff;color:var(--coral);border:1px solid rgba(239,68,68,.3)}
 .qa-box{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
 .qa-box textarea{min-height:78px}
+@media(max-width:640px){
+  header{align-items:flex-start}.nav{justify-content:flex-end}.badge{width:100%;text-align:right}
+  .workspace-switch{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -121,14 +125,15 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <button type="button" id="btnDemo" onclick="setLlmMode('mock')">Demo</button>
       <button type="button" id="btnLive" onclick="setLlmMode('live')">Live</button>
     </div>
-    <a href="/">Лендинг</a>
+    <a href="/about">О проекте</a>
   </div>
 </header>
 <main>
   <section class="panel left">
-    <div class="workspace-switch" aria-label="Раздел кабинета">
-      <button type="button" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинический запрос</button>
-      <button type="button" id="workspaceDocument" onclick="setWorkspace('document')">Разбор PDF</button>
+    <div class="workspace-switch" role="tablist" aria-label="Режим работы Vitalis">
+      <button type="button" role="tab" aria-selected="true" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинические рекомендации</button>
+      <button type="button" role="tab" aria-selected="false" id="workspaceMedical" onclick="setWorkspace('medical')">Медицинский PDF</button>
+      <button type="button" role="tab" aria-selected="false" id="workspaceInsurance" onclick="setWorkspace('insurance')">Страховой полис</button>
     </div>
     <div id="clinicalTool">
       <h1>Поиск по клиническим рекомендациям</h1>
@@ -153,14 +158,9 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
     <div id="documentTool" class="hidden">
       <h1 id="documentHeading">Разбор медицинского PDF</h1>
       <p class="sub" id="documentIntro">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
-      <div class="controls">
-        <select id="documentKind" onchange="updateDocumentMode()">
-          <option value="medical">Медицинский документ</option>
-          <option value="insurance">Страховой договор или полис</option>
-        </select>
-      </div>
+      <input type="hidden" id="documentKind" value="medical">
       <label class="upload">
-        <strong>Выберите PDF с текстовым слоем</strong>
+        <strong id="documentUploadTitle">Выберите медицинский PDF</strong>
         <span class="hint">До 8 МБ и 40 страниц. Сканы без OCR пока не поддерживаются.</span>
         <input type="file" id="documentFile" accept="application/pdf,.pdf">
       </label>
@@ -249,13 +249,34 @@ let documentSessionId = null;
 let documentSessionKind = 'medical';
 
 function setWorkspace(name){
-  const documentMode = name === 'document';
+  const workspace = ['clinical', 'medical', 'insurance'].includes(name) ? name : 'clinical';
+  const documentMode = workspace !== 'clinical';
+  const kindInput = document.getElementById('documentKind');
+  if(documentMode && kindInput.value !== workspace){
+    kindInput.value = workspace;
+    document.getElementById('documentFile').value = '';
+  }
   document.getElementById('clinicalTool').classList.toggle('hidden', documentMode);
   document.getElementById('documentTool').classList.toggle('hidden', !documentMode);
   document.getElementById('clinicalOutput').classList.toggle('hidden', documentMode);
   document.getElementById('documentOutput').classList.toggle('hidden', !documentMode);
-  document.getElementById('workspaceClinical').classList.toggle('active', !documentMode);
-  document.getElementById('workspaceDocument').classList.toggle('active', documentMode);
+  [['workspaceClinical', 'clinical'], ['workspaceMedical', 'medical'], ['workspaceInsurance', 'insurance']]
+    .forEach(([id, value])=>{
+      const button = document.getElementById(id);
+      const selected = workspace === value;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+  if(documentMode){
+    updateDocumentMode();
+    const currentSession = documentSessionId && documentSessionKind === workspace;
+    document.getElementById('documentEmpty').style.display = currentSession ? 'none' : 'block';
+    document.getElementById('documentCard').style.display = currentSession ? 'block' : 'none';
+    if(!currentSession){
+      document.getElementById('documentStatus').textContent = 'Готов к загрузке';
+      document.getElementById('documentError').textContent = '';
+    }
+  }
 }
 
 function updateDocumentMode(){
@@ -267,6 +288,17 @@ function updateDocumentMode(){
   document.getElementById('documentIntro').textContent = insurance
     ? 'Vitalis находит тип страховки, покрытие, исключения и лимиты. Если покрытия нет в PDF, поиск ограничивается официальным сайтом распознанной страховой компании.'
     : 'Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.';
+  document.getElementById('documentUploadTitle').textContent = insurance
+    ? 'Выберите страховой договор или полис в PDF'
+    : 'Выберите медицинский PDF';
+  document.getElementById('documentAnalyzeBtn').textContent = insurance
+    ? 'Проверить страховой полис'
+    : 'Разобрать медицинский документ';
+  if(!documentSessionId || documentSessionKind !== kind){
+    document.getElementById('documentEmpty').textContent = insurance
+      ? 'Здесь появится покрытие, исключения, лимиты и данные страховщика'
+      : 'Здесь появится разбор медицинского документа с постраничными цитатами';
+  }
   document.getElementById('insuranceSearchOption').classList.toggle('hidden', !insurance);
   document.getElementById('documentQuestion').placeholder = insurance
     ? 'Например: какой это тип страховки и что входит в покрытие?'

@@ -29,7 +29,7 @@ after(async () => {
 });
 
 test('cabinet has no analytics or third-party assets and forbids caching', async () => {
-  for (const path of ['/app', '/app/']) {
+  for (const path of ['/', '/index.html', '/app', '/app/']) {
     const response = await fetch(base + path);
     const text = await response.text();
     assert.equal(response.status, 200);
@@ -39,6 +39,9 @@ test('cabinet has no analytics or third-party assets and forbids caching', async
     assert.doesNotMatch(text, /mc\.yandex\.ru|fonts\.googleapis\.com|webvisor:true/);
     assert.match(text, /Препараты и дозировки по клинической рекомендации/);
     assert.match(text, /renderMedications/);
+    assert.match(text, /Клинические рекомендации/);
+    assert.match(text, /Медицинский PDF/);
+    assert.match(text, /Страховой полис/);
   }
 });
 
@@ -71,16 +74,18 @@ test('multipart PDF and deletion reach the backend unchanged', async () => {
   assert.equal((await removed.json()).method, 'DELETE');
 });
 
-test('health and landing remain available', async () => {
+test('health and project description remain available', async () => {
   assert.equal((await fetch(base + '/api/health')).status, 200);
   assert.equal((await fetch(base + '/api/ai/health')).status, 200);
-  const response = await fetch(base + '/');
-  assert.equal(response.status, 200);
-  assert.match(await response.text(), /mc\.yandex\.ru/);
+  for (const path of ['/about', '/about/', '/landing', '/landing/']) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /mc\.yandex\.ru/);
+  }
 });
 
 test('landing describes the implemented scope and strict knowledge boundary', async () => {
-  const response = await fetch(base + '/');
+  const response = await fetch(base + '/about');
   const text = await response.text();
   assert.equal(response.status, 200);
   assert.match(text, /Поиск по клиническим рекомендациям/);

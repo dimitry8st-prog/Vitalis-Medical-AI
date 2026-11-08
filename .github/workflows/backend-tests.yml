@@ -84,9 +84,15 @@ jobs:
               assert payload["ok"] is True, (url, payload)
               assert payload["service"] == expected_service, (url, payload)
 
-          with urlopen("http://127.0.0.1:3080/app", timeout=10) as response:
-              html = response.read().decode("utf-8")
-          assert "<!doctype html" in html.lower()
+          for path, marker in (
+              ("/", "Клинические рекомендации"),
+              ("/app", "Страховой полис"),
+              ("/about", "Только проверенные"),
+          ):
+              with urlopen(f"http://127.0.0.1:3080{path}", timeout=10) as response:
+                  html = response.read().decode("utf-8")
+              assert "<!doctype html" in html.lower(), path
+              assert marker in html, path
           PY
       - name: Show container logs on failure
         if: failure()
