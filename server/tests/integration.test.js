@@ -76,3 +76,25 @@ test('health and landing remain available', async () => {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /mc\.yandex\.ru/);
 });
+
+test('landing describes the implemented scope and strict knowledge boundary', async () => {
+  const response = await fetch(base + '/');
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(text, /Поиск по клиническим рекомендациям/);
+  assert.match(text, /Разбор медицинского PDF/);
+  assert.match(text, /Разбор страхового полиса/);
+  assert.match(text, /только проверенные полные тексты клинических рекомендаций/i);
+  for (const unsupportedClaim of [
+    /генерация медицинских статей/i,
+    /PubMed/i,
+    /Medscape/i,
+    /Mayo Clinic/i,
+    /Cochrane Library/i,
+    /LangChain/i,
+    /Obsidian Publish/i,
+    /полным соблюдением 152-ФЗ/i,
+  ]) {
+    assert.doesNotMatch(text, unsupportedClaim);
+  }
+});

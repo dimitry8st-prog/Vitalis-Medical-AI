@@ -43,6 +43,11 @@ Read this file before auditing, changing, testing, or deploying Vitalis.
 - Portal article `brain-options-decision-2026-11.json` was published on 2026-11-08,
   but remains `portal_only=true` and `vitalis_ingest_allowed=false`. Publication does
   not make it a Vitalis source.
+- The Vitalis landing page was aligned with the implemented closed-pilot scope on
+  2026-11-08. It now describes clinical-guideline search, deidentified medical-PDF
+  analysis, and insurance-policy analysis. Do not reintroduce PubMed, medical-article
+  generation, LangChain, Obsidian Publish, paid plans, or a 152-FZ compliance claim
+  unless those capabilities and claims have been separately implemented and verified.
 - A live check on 2026-11-08 found the official Minzdrav PDF service unavailable:
   guideline `295_4` returned HTTP 500, the public preview remained on document loading,
   and a second official PDF request timed out. Do not replace the failed PDF sync with
