@@ -40,6 +40,17 @@ test('cabinet has no analytics or third-party assets and forbids caching', async
   }
 });
 
+test('cabinet serves the first migraine visit checklist with all nine steps', async () => {
+  const response = await fetch(base + '/app');
+  const html = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(html, /id="workspaceMigraine" data-workspace="migraine"/);
+  assert.match(html, /id="migraineTool" data-workspace-panel="migraine"/);
+  assert.equal([...html.matchAll(/<input type="checkbox" data-migraine-step>/g)].length, 9);
+  assert.match(html, /id="migraineReset"/);
+});
+
 test('JSON API proxy preserves paths, methods and payloads', async () => {
   for (const path of ['/ask', '/mode', '/rag/rebuild', '/documents/token/questions']) {
     const response = await fetch(base + '/api/ai' + path, { method: 'POST', headers: {
