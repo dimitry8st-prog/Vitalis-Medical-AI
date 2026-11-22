@@ -151,6 +151,8 @@ curl -fsS http://127.0.0.1:3080/api/ai/health
 - Передача специалисту (overview, prompt guide, метрики, путь к бете): `MedBot_AI_Handover.md`
 - Модуль медицинских документов: `docs/VITALIS_DOCUMENTS.md`
 - Клинический quality gate и 30 синтетических сценариев: `backend/evals/README.md`
+- Кандидат для врачебной проверки: [9 принципов первого приёма при мигрени по Vikelis et al. (2026)](docs/clinical_review/migraine_first_visit_vikelis_2026.md). Это **обзорная публикация, не клиническое руководство**; материал хранится **вне vault/RAG** до отдельного врачебного одобрения.
+- Инструкции для отдельного Gemini Gem: [GEM_MIGRAINE_FIRST_VISIT_2026.md](docs/gems/GEM_MIGRAINE_FIRST_VISIT_2026.md) — самостоятельный Markdown, без передачи персональных медицинских данных.
 - Реестр проверяемых первоисточников и review-gate: `vault/source_registry.json`
 - 17 официальных карточек КР Минздрава по неврологии/нейрохирургии: `vault/guidelines/rf`
 - Проверка полного текста российских КР выполняется по официальной странице Минздрава;
