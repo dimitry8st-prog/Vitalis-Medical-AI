@@ -76,8 +76,8 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .chip{font-family:var(--mn);font-size:10.5px;padding:4px 8px;border-radius:999px;background:var(--ice);border:1px solid var(--line);color:var(--slate)}
 .hidden{display:none!important}
-.workspace-switch{display:flex;gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
-.workspace-switch button{flex:1;border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer}
+.workspace-switch{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;padding:4px;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.workspace-switch button{flex:1 1 124px;border:none;border-radius:10px;background:transparent;color:var(--slate);padding:10px 12px;font-weight:600;cursor:pointer}
 .workspace-switch button.active{background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(10,22,40,.16)}
 .upload{display:block;border:1.5px dashed rgba(59,130,246,.35);background:var(--ice);border-radius:14px;padding:16px;margin-bottom:12px}
 .upload input{display:block;width:100%;margin-top:10px}
@@ -94,6 +94,29 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
 .doc-actions .danger{background:#fff;color:var(--coral);border:1px solid rgba(239,68,68,.3)}
 .qa-box{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
 .qa-box textarea{min-height:78px}
+main[data-workspace="migraine"]{grid-template-columns:minmax(0,1fr)}
+main[data-workspace="migraine"] > .left{border-right:0}
+main[data-workspace="migraine"] > .right{display:none}
+main[data-workspace="migraine"] .workspace-switch,#migraineTool{max-width:1100px;margin-inline:auto}
+.migraine-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:16px 0}
+.migraine-actions .btn{padding:8px 14px}
+.migraine-actions .btn:hover{background:var(--ice)}
+.migraine-actions .btn:disabled{cursor:default}
+.migraine-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.migraine-grid .sec{margin:0}
+.migraine-grid .sec > p{margin-top:8px;font-size:14px;line-height:1.5}
+.migraine-grid h2{font-size:15px;line-height:1.4}
+.migraine-grid label{display:flex;align-items:flex-start;gap:9px;cursor:pointer}
+.migraine-grid input[type=checkbox]{width:18px;height:18px;flex-shrink:0;accent-color:var(--em-deep)}
+.migraine-grid details{margin-top:10px;font-size:14px;line-height:1.5}
+.migraine-grid summary{cursor:pointer;color:#075985;font-weight:600}
+.migraine-grid details ul{margin-top:8px}
+.migraine-alert{margin-bottom:16px}
+.migraine-alert h2{font-size:16px;margin-bottom:5px}
+.migraine-alert p{font-size:14px;line-height:1.5}
+.migraine-intake{grid-column:1/-1}
+.migraine-sources a{text-decoration:underline}
+@media(max-width:680px){.migraine-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -111,13 +134,14 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
     <a href="/">Лендинг</a>
   </div>
 </header>
-<main>
+<main id="cabinet" data-workspace="clinical">
   <section class="panel left">
     <div class="workspace-switch" aria-label="Раздел кабинета">
-      <button type="button" id="workspaceClinical" class="active" onclick="setWorkspace('clinical')">Клинический запрос</button>
-      <button type="button" id="workspaceDocument" onclick="setWorkspace('document')">Разбор PDF</button>
+      <button type="button" id="workspaceClinical" data-workspace="clinical" aria-pressed="true" class="active" onclick="setWorkspace('clinical')">Клинический запрос</button>
+      <button type="button" id="workspaceDocument" data-workspace="document" aria-pressed="false" onclick="setWorkspace('document')">Разбор PDF</button>
+      <button type="button" id="workspaceMigraine" data-workspace="migraine" aria-pressed="false" onclick="setWorkspace('migraine')">Чек-лист мигрени</button>
     </div>
-    <div id="clinicalTool">
+    <div id="clinicalTool" data-workspace-panel="clinical">
       <h1>Клинический запрос</h1>
       <p class="sub">Система Vitalis: сначала база знаний, затем веб-проверка выбранного контура. Ответ — строго по заданному вопросу.</p>
       <div class="controls">
@@ -137,7 +161,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <div class="status" id="status">Готов к запросу</div>
       <div class="err" id="err"></div>
     </div>
-    <div id="documentTool" class="hidden">
+    <div id="documentTool" data-workspace-panel="document" class="hidden">
       <h1 id="documentHeading">Разбор медицинского PDF</h1>
       <p class="sub" id="documentIntro">Vitalis извлекает текст по страницам, обезличивает его и показывает только проверяемые факты с цитатами.</p>
       <div class="controls">
@@ -164,9 +188,87 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
       <div class="status" id="documentStatus">Готов к загрузке</div>
       <div class="err" id="documentError"></div>
     </div>
+    <section id="migraineTool" data-workspace-panel="migraine" class="hidden" aria-labelledby="migraineTitle">
+      <h1 id="migraineTitle">Первый приём при мигрени</h1>
+      <p class="sub">Образовательный чек-лист для врача по ведению взрослых. Версия для врачебной проверки.</p>
+      <div class="sec warn migraine-alert">
+        <h2>Когда нужна немедленная оценка</h2>
+        <p>Громоподобная боль, внезапный очаговый дефицит или внезапная потеря зрения на один глаз требуют экстренной очной оценки. При подозрении на ТИА сохраняйте срочную маршрутизацию даже после исчезновения симптомов. Новая сильная или заметно изменившаяся боль при беременности или после родов также требует срочной оценки.</p>
+      </div>
+      <div class="migraine-actions">
+        <p id="migraineProgress" role="status">Отмечено 0 из 9</p>
+        <button id="migraineReset" class="btn btn-gh" type="button" disabled>Сбросить отметки</button>
+      </div>
+      <div class="migraine-grid">
+        <section class="sec migraine-intake">
+          <h2><label><input type="checkbox" data-migraine-step>Триаж, осмотр и прежние обследования</label></h2>
+          <p>Уточните начало, изменение фенотипа, лихорадку, травму, нарушения сознания, онкологический анамнез и иммунодефицит. Проведите неврологический осмотр, включая глазное дно. Просмотрите прежние обследования, сопутствующие болезни, препараты, добавки и аллергии.</p>
+          <p>При стабильной типичной мигрени, нормальном осмотре и отсутствии красных флагов рутинная нейровизуализация не требуется.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>История приступа</label></h2>
+          <p>Попросите описать типичный приступ от начала до окончания. Уточните другие типы боли, частоту за последние шесть месяцев и изменения по сравнению с прошлым годом.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Диагноз, аура и бремя болезни</label></h2>
+          <p>Подсчитайте отдельно дни головной боли, мигрени и тяжёлой боли за месяц. Уточните обратимость, развитие и длительность каждого симптома ауры. Впервые возникшие, необычные или стойкие симптомы требуют оценки альтернативных причин. Зафиксируйте ограничения по MIDAS или HIT-6 и предложите дневник.</p>
+          <details>
+            <summary>Диагностические пороги ICHD-3</summary>
+            <ul>
+              <li><strong>Без ауры (§1.1).</strong> Не менее 5 приступов длительностью 4–72 часа при отсутствии эффективного лечения. Нужны как минимум два признака боли из четырёх (односторонняя, пульсирующая, умеренная или сильная, усиливается при обычной активности) и тошнота/рвота либо сочетание фото- и фонофобии.</li>
+              <li><strong>С аурой (§1.2).</strong> Не менее 2 приступов с полностью обратимыми симптомами и как минимум 3 из 6 признаков. Интервал 5–60 минут относится к отдельному симптому ауры. Двигательные симптомы могут длиться до 72 часов. Возможна аура без головной боли.</li>
+              <li><strong>Хроническая (§1.3).</strong> Не менее 15 дней головной боли, включая не менее 8 дней, отвечающих мигренозным критериям, ежемесячно более 3 месяцев. Проверьте анамнез не менее 5 соответствующих приступов и рассмотрите альтернативные диагнозы.</li>
+            </ul>
+          </details>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Обучение и совместное решение</label></h2>
+          <p>Уточните, что пациент знает о мигрени и чего ждёт от лечения. Объясните течение болезни и согласуйте приоритеты и реалистичные цели.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Переносимость и ноцебо</label></h2>
+          <p>Уточните фактические нежелательные явления, опасения, причины отмены и длительность прошлых проб. Обсудите опасения без обесценивания жалоб.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Купирование и лекарственный абузус</label></h2>
+          <p>Проверьте средства, дозы, дни приёма, ответ через 2 часа, рецидив и переносимость. По ICHD-3 порог избыточного приёма — от 10 дней в месяц для триптанов и комбинированных анальгетиков, от 15 для неопиоидных анальгетиков.</p>
+          <p>Для лекарственно-индуцированной головной боли также нужны предшествующее расстройство с головной болью, ≥15 дней боли в месяц и регулярный приём в объёме указанного порога или выше более 3 месяцев.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Обсуждение профилактики</label></h2>
+          <p>Оцените функцию, частоту использования и эффективность купирующих средств, прежние курсы, коморбидность и репродуктивные планы. Согласуйте цель и срок оценки профилактики.</p>
+          <details>
+            <summary>Ориентиры по источникам</summary>
+            <ul>
+              <li><strong>Vikelis et al.</strong> Раннее обсуждение при ≥4 днях мигрени или умеренной/сильной боли в месяц либо при существенных ограничениях и проблемах с купированием.</li>
+              <li><strong>IHS, 2024.</strong> ≥4 дней головной боли в месяц или другие основания, включая влияние мигрени на жизнь и недостаточный эффект купирования.</li>
+              <li><strong>КР РФ 295_4, §3.3.</strong> Среди показаний ≥3 тяжёлых дезадаптирующих приступов в месяц при адекватном купировании, ≥8 дней боли в месяц или пролонгированная аура даже при редких приступах.</li>
+            </ul>
+          </details>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Образ жизни и сопутствующие состояния</label></h2>
+          <p>Согласуйте посильные изменения сна, питания, гидратации и активности. Уточните бессонницу, тревогу, депрессию, нарушения ВНЧС и возможное апноэ сна. При необходимости обсудите поведенческие методы, например КПТ и релаксацию.</p>
+        </section>
+        <section class="sec">
+          <h2><label><input type="checkbox" data-migraine-step>Дневник и контрольный визит</label></h2>
+          <p>Согласуйте, какие дни боли и приёма лекарств отмечать. Выдайте письменный план и назначьте контрольный визит для оценки функции, переносимости и целей пациента.</p>
+        </section>
+      </div>
+      <p class="hint">Отметки остаются в открытой вкладке и сбрасываются при её обновлении.</p>
+      <div class="src migraine-sources">
+        <h5>Источники</h5>
+        <a href="https://doi.org/10.1177/25158163261507712" target="_blank" rel="noopener noreferrer">Vikelis et al., Cephalalgia Reports, 2026 · образовательная редакционная статья, CC BY 4.0</a>
+        <a href="https://ichd-3.org/1-migraine/" target="_blank" rel="noopener noreferrer">ICHD-3 · диагностические критерии мигрени</a>
+        <a href="https://ichd-3.org/8-headache-attributed-to-a-substance-or-its-withdrawal/8-2-medication-overuse-headache-moh/" target="_blank" rel="noopener noreferrer">ICHD-3, §8.2 · лекарственно-индуцированная головная боль</a>
+        <a href="https://doi.org/10.1177/03331024241269735" target="_blank" rel="noopener noreferrer">IHS, 2024 · рекомендации по профилактике</a>
+        <a href="https://cr.minzdrav.gov.ru/view-cr/295_4" target="_blank" rel="noopener noreferrer">Минздрав РФ · КР «Мигрень» у взрослых, 295_4</a>
+        <a href="https://www.nice.org.uk/guidance/cg150" target="_blank" rel="noopener noreferrer">NICE CG150 · диагностика и ведение головной боли</a>
+      </div>
+    </section>
   </section>
   <section class="panel right">
-    <div id="clinicalOutput">
+    <div id="clinicalOutput" data-workspace-panel="clinical">
       <div id="empty" class="empty">Карточка протокола появится после запроса</div>
       <div class="pc" id="card" style="display:none">
         <div class="pc-h">
@@ -194,7 +296,7 @@ textarea{width:100%;min-height:120px;padding:14px;border-radius:14px;border:1px 
         </div>
       </div>
     </div>
-    <div id="documentOutput" class="hidden">
+    <div id="documentOutput" data-workspace-panel="document" class="hidden">
       <div id="documentEmpty" class="empty">Здесь появится разбор документа с постраничными цитатами</div>
       <div class="pc" id="documentCard" style="display:none">
         <div class="pc-h">
@@ -234,13 +336,16 @@ let documentSessionId = null;
 let documentSessionKind = 'medical';
 
 function setWorkspace(name){
-  const documentMode = name === 'document';
-  document.getElementById('clinicalTool').classList.toggle('hidden', documentMode);
-  document.getElementById('documentTool').classList.toggle('hidden', !documentMode);
-  document.getElementById('clinicalOutput').classList.toggle('hidden', documentMode);
-  document.getElementById('documentOutput').classList.toggle('hidden', !documentMode);
-  document.getElementById('workspaceClinical').classList.toggle('active', !documentMode);
-  document.getElementById('workspaceDocument').classList.toggle('active', documentMode);
+  const cabinet = document.getElementById('cabinet');
+  cabinet.dataset.workspace = name;
+  for (const panel of cabinet.querySelectorAll('[data-workspace-panel]')){
+    panel.classList.toggle('hidden', panel.dataset.workspacePanel !== name);
+  }
+  for (const button of cabinet.querySelectorAll('.workspace-switch [data-workspace]')){
+    const selected = button.dataset.workspace === name;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
 }
 
 function updateDocumentMode(){
@@ -747,6 +852,25 @@ async function deleteDocumentSession(){
 }
 
 updateDocumentMode();
+const migraineTool = document.getElementById('migraineTool');
+const migraineSteps = [...migraineTool.querySelectorAll('[data-migraine-step]')];
+const migraineProgress = document.getElementById('migraineProgress');
+const migraineReset = document.getElementById('migraineReset');
+
+function updateMigraineProgress(){
+  const marked = migraineSteps.filter(step => step.checked).length;
+  migraineProgress.textContent = `Отмечено ${marked} из ${migraineSteps.length}`;
+  migraineReset.disabled = marked === 0;
+}
+
+migraineTool.addEventListener('change', updateMigraineProgress);
+migraineReset.addEventListener('click', () => {
+  for (const step of migraineSteps) step.checked = false;
+  updateMigraineProgress();
+});
+for (const step of migraineSteps) step.checked = false;
+updateMigraineProgress();
+
 refreshHealth();
 </script>
 </body>

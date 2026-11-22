@@ -15,9 +15,9 @@ class MigraineReviewDocsTests(unittest.TestCase):
         self.assertIn("needs_review", text)
         self.assertIn("не активирован в RAG", text)
         self.assertIn("10.1177/25158163261507712", text)
-        self.assertIn("не клинические рекомендации", text.lower())
-        self.assertIn("## 1.", text)
-        self.assertIn("## 8.", text)
+        self.assertIn("образовательная редакционная статья", text.lower())
+        for section in range(9):
+            self.assertIn(f"## {section}.", text)
         self.assertFalse(VITALIS.is_relative_to(VAULT))
         self.assertFalse(any(path.name == VITALIS.name for path in VAULT.rglob("*.md")))
 
@@ -28,6 +28,7 @@ class MigraineReviewDocsTests(unittest.TestCase):
         self.assertIn("не подбирай индивидуальную терапию", text)
         self.assertIn("РФ/INT", text)
         self.assertFalse(GEM.is_relative_to(VAULT))
+        self.assertFalse(any(path.name == GEM.name for path in VAULT.rglob("*.md")))
 
 
 if __name__ == "__main__":
