@@ -1,10 +1,10 @@
 """Clinical review materials stay outside the automatic Vitalis vault/RAG."""
 
-from pathlib import Path
+import pathlib
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 VITALIS = ROOT / "docs" / "clinical_review" / "migraine_first_visit_vikelis_2026.md"
 GEM = ROOT / "docs" / "gems" / "GEM_MIGRAINE_FIRST_VISIT_2026.md"
 VAULT = ROOT / "vault"
