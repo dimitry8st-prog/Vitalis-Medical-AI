@@ -45,6 +45,17 @@ test('cabinet has no analytics or third-party assets and forbids caching', async
   }
 });
 
+test('cabinet offers all nine migraine checklist steps in all entry points', async () => {
+  for (const path of ['/', '/app', '/app/']) {
+    const response = await fetch(base + path);
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /aria-controls="migraineTool" id="workspaceMigraine"/);
+    assert.equal([...html.matchAll(/<input type="checkbox" data-migraine-step>/g)].length, 9);
+  }
+});
+
 test('JSON API proxy preserves paths, methods and payloads', async () => {
   for (const path of ['/ask', '/mode', '/rag/rebuild', '/documents/token/questions']) {
     const response = await fetch(base + '/api/ai' + path, { method: 'POST', headers: {
