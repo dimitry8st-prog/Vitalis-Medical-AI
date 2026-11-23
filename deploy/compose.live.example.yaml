@@ -5,3 +5,6 @@ services:
       - /root/.config/vitalis-ru/python.env
     environment:
       LLM_MODE: live
+      EVIDENCE_GATE_MODE: strict
+      DOCUMENT_EXTERNAL_LLM_ENABLED: "false"
+      GIGACHAT_ENABLED: "false"

@@ -14,6 +14,7 @@ from app.config import Settings
 from app.documents.models import DocumentPage
 from app.documents.security import scan_untrusted_text
 from app.rag.document_fetch import enrich_primary_documents
+from app.rag.eligibility import is_clinical_guideline_web_hit
 from app.rag.source_policy import (
     classify_international_source,
     is_international_evidence_source,
@@ -53,12 +54,6 @@ async def web_search(
             "rf_registry" if lang == "ru" else "intl_society_guideline",
         )
 
-    literature_task = (
-        asyncio.create_task(_literature_bundle(query, max_results, en_focus))
-        if scope in ("intl", "both")
-        else None
-    )
-
     queries = _build_queries(
         query,
         bilingual=bilingual,
@@ -88,15 +83,12 @@ async def web_search(
     for batch, lang, kind in batches:
         _merge(all_hits, seen, batch, lang, kind)
 
-    if literature_task is not None:
-        for batch, lang, kind in await literature_task:
-            _merge(all_hits, seen, batch, lang, kind)
-
     for item in all_hits:
         item["relevance_score"] = _score_hit(item, f"{focus} {en_focus}")
     all_hits = [
         item for item in all_hits
-        if not scan_untrusted_text((DocumentPage(
+        if is_clinical_guideline_web_hit(item)
+        and not scan_untrusted_text((DocumentPage(
             number=1, text=f"{item.get('title', '')}\n{item.get('snippet', '')}"
         ),)).prompt_injection_detected
     ]
@@ -160,7 +152,12 @@ def _merge(
             )
         else:
             item.update(classify_international_source(str(item.get("url") or "")))
-        item["document_type"] = _document_type(kind, str(item.get("title") or ""))
+        item["document_type"] = _document_type(
+            kind,
+            str(item.get("title") or ""),
+            str(item.get("url") or ""),
+            str(item.get("snippet") or ""),
+        )
         url = (item.get("url") or "").strip()
         key = url or f"{item.get('title')}|{item.get('snippet')}"
         if not key or key in seen:
@@ -189,15 +186,12 @@ def _build_queries(
 
     if scope in ("rf", "both"):
         rf_focus = _rf_search_focus(query)
-        profile = _rf_profile_hint(rf_focus)
         out.extend(
             [
                 (f"{rf_focus} клинические рекомендации Минздрав РФ", "ru", "rf_guideline"),
                 (f"site:cr.minzdrav.gov.ru {ru_focus} {intent_ru}", "ru", "rf_registry"),
                 (f"{ru_focus} клинические рекомендации РФ filetype:pdf", "ru", "rf_guideline_pdf"),
-                (f"{rf_focus} {intent_ru} {profile} НМИЦ", "ru", "rf_institute"),
                 (f"{rf_focus} {intent_ru} российское профессиональное медицинское общество рекомендации", "ru", "rf_society"),
-                (f"{rf_focus} {intent_ru} {profile} медицинский журнал обзор", "ru", "rf_journal"),
             ]
         )
         if freshness_extra:
@@ -214,16 +208,8 @@ def _build_queries(
                 (f'"{en_focus}" clinical practice guideline {intent_en} ({society_domains})', "en", "intl_society_guideline"),
                 (f'"{en_focus}" guideline NIH CDC AHA ASA AAN {intent_en}', "en", "intl_us_guideline"),
                 (f'"{en_focus}" guideline Canada Australia {intent_en}', "en", "intl_other_guideline"),
-                (f'"{en_focus}" Cochrane systematic review meta-analysis {intent_en}', "en", "intl_evidence_synthesis"),
             ]
         )
-        if _needs_regulatory_search(query):
-            out.extend(
-                [
-                    (f'"{en_focus}" site:fda.gov OR site:dailymed.nlm.nih.gov dose indication', "en", "intl_us_regulator"),
-                    (f'"{en_focus}" site:ema.europa.eu OR site:bnf.nice.org.uk dose indication', "en", "intl_eu_regulator"),
-                ]
-            )
         if freshness_extra:
             out.append(
                 (f'"{en_focus}" guideline {prev} OR {year}', "en", "intl_freshness")
@@ -239,17 +225,27 @@ def _build_queries(
     return deduped
 
 
-def _document_type(kind: str, title: str = "") -> str:
-    if re.search(r"\bguideline\b|practice guideline|recommendations? for", title or "", re.I):
+def _document_type(
+    kind: str,
+    title: str = "",
+    url: str = "",
+    snippet: str = "",
+) -> str:
+    try:
+        host = (urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        host = ""
+    if host == "cr.minzdrav.gov.ru" or host.endswith(".cr.minzdrav.gov.ru"):
         return "clinical_guideline"
-    if "regulator" in kind:
-        return "drug_label_or_regulatory_document"
-    if "evidence_synthesis" in kind or kind in {"pubmed", "europe_pmc"}:
-        return "research_or_evidence_synthesis"
-    if "guideline" in kind or kind in {"intl_who", "intl_uk_guideline"}:
+    evidence = f"{title}\n{snippet}"
+    if re.search(
+        r"\b(?:clinical\s+practice\s+)?guidelines?\b|"
+        r"\bguidance\b|\brecommendations?\s+(?:for|on)\b|"
+        r"клиническ\w*\s+рекомендац\w*",
+        evidence,
+        re.I,
+    ):
         return "clinical_guideline"
-    if kind.startswith("rf_"):
-        return "russian_clinical_source"
     return "other"
 
 
@@ -637,17 +633,14 @@ def _score_hit(item: dict[str, Any], focus: str) -> float:
         "rf_registry": 4,
         "rf_guideline": 3,
         "rf_guideline_pdf": 3,
-        "rf_institute": 2,
         "rf_society": 2,
-        "rf_journal": 1,
+        "rf_freshness": 2,
         "intl_who": 5,
         "intl_uk_guideline": 5,
         "intl_society_guideline": 5,
         "intl_us_guideline": 4,
         "intl_other_guideline": 3,
-        "intl_us_regulator": 5,
-        "intl_eu_regulator": 5,
-        "intl_evidence_synthesis": 2,
+        "intl_freshness": 2,
     }.get(str(item.get("query_kind") or ""), 0)
     international_penalty = 6 if item.get("lang") == "ru" and _is_international_url(url) else 0
     year = item.get("year") or 0
@@ -708,7 +701,7 @@ def _balanced_results(
     hits: list[dict[str, Any]], scope: str, max_results: int
 ) -> list[dict[str, Any]]:
     ranked = sorted(
-        hits,
+        (item for item in hits if is_clinical_guideline_web_hit(item)),
         key=lambda item: (item.get("relevance_score", 0), item.get("year") or 0),
         reverse=True,
     )
@@ -722,9 +715,8 @@ def _balanced_results(
         "rf_registry",
         "rf_guideline",
         "rf_guideline_pdf",
-        "rf_institute",
         "rf_society",
-        "rf_journal",
+        "rf_freshness",
     )
     if scope == "rf":
         return _select_with_kind_quotas(rf_ranked, rf_kinds, max_results * 2)
@@ -741,11 +733,7 @@ def _balanced_results(
         "intl_society_guideline",
         "intl_us_guideline",
         "intl_other_guideline",
-        "intl_us_regulator",
-        "intl_eu_regulator",
-        "intl_evidence_synthesis",
-        "pubmed",
-        "europe_pmc",
+        "intl_freshness",
     )
     if scope == "intl":
         return _select_with_kind_quotas(intl_ranked, intl_kinds, max_results * 2)

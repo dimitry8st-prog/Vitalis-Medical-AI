@@ -58,6 +58,43 @@ class CitationGuardTests(unittest.TestCase):
         self.assertIn("50 мг/сут", guarded["content"])
         self.assertEqual(guarded["citation_validation"]["supported_dose_statements"], 1)
 
+    def test_keeps_dose_from_official_local_full_text_only(self):
+        url = "https://cr.minzdrav.gov.ru/view-cr/295_4"
+        guarded = guard_clinical_payload(
+            {"content": f"Рекомендация указывает 50 мг/сут. Источник: {url}"},
+            web_hits=[],
+            rag_hits=[
+                {
+                    "text": "[Страница 42] Рекомендовано 50 мг/сут.",
+                    "meta": {
+                        "source_url": url,
+                        "content_scope": "official_full_text_extracted",
+                        "full_text_checked": "true",
+                    },
+                }
+            ],
+            strict=True,
+        )
+        self.assertIn("50 мг/сут", guarded["content"])
+        self.assertFalse(guarded["citation_validation"]["blocked"])
+
+        lifeos = guard_clinical_payload(
+            {"content": "Вторичная заметка указывает 50 мг/сут."},
+            web_hits=[],
+            rag_hits=[
+                {
+                    "text": "50 мг/сут",
+                    "meta": {
+                        "source_url": "https://example.org/review",
+                        "content_scope": "reviewed_excerpt",
+                        "full_text_checked": "false",
+                    },
+                }
+            ],
+            strict=False,
+        )
+        self.assertIn(UNSUPPORTED_DOSE_MARKER, lifeos["content"])
+
     def test_strict_mode_blocks_unknown_citation(self):
         guarded = guard_clinical_payload(
             {"content": "Источник https://unknown.example/claim"},

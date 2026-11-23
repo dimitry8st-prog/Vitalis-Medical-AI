@@ -28,7 +28,7 @@ jobs:
           python -m pip install pip-audit==2.10.1 ruff==0.14.2
           pip-audit -r backend/requirements.txt
       - name: Lint Python
-        run: ruff check --select F,I backend/app backend/tests backend/evals
+        run: ruff check --select F,I backend/app backend/tests backend/evals backend/scripts
       - name: Run tests
         env:
           PYTHONPATH: backend
@@ -84,9 +84,15 @@ jobs:
               assert payload["ok"] is True, (url, payload)
               assert payload["service"] == expected_service, (url, payload)
 
-          with urlopen("http://127.0.0.1:3080/app", timeout=10) as response:
-              html = response.read().decode("utf-8")
-          assert "<!doctype html" in html.lower()
+          for path, marker in (
+              ("/", "Клинические рекомендации"),
+              ("/app", "Страховой договор / полис"),
+              ("/about", "Только проверенные"),
+          ):
+              with urlopen(f"http://127.0.0.1:3080{path}", timeout=10) as response:
+                  html = response.read().decode("utf-8")
+              assert "<!doctype html" in html.lower(), path
+              assert marker in html, path
           PY
       - name: Show container logs on failure
         if: failure()

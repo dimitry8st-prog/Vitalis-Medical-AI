@@ -13,7 +13,7 @@ async function sendTelegram(lead) {
     `<b>Имя:</b> ${escapeHtml(lead.name)}`,
     `<b>Email:</b> ${escapeHtml(lead.email)}`,
     `<b>Роль:</b> ${escapeHtml(lead.role || '—')}`,
-    `<b>Тариф:</b> ${escapeHtml(lead.tariff || '—')}`,
+    `<b>Интерес:</b> ${escapeHtml(lead.tariff || '—')}`,
     lead.comment ? `<b>Комментарий:</b> ${escapeHtml(lead.comment)}` : null,
     '',
     `<i>${escapeHtml(lead.createdAt)}</i>`,

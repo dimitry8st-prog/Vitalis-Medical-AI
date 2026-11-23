@@ -26,7 +26,7 @@ async function sendEmail(lead) {
     `Имя: ${lead.name}`,
     `Email: ${lead.email}`,
     `Роль: ${lead.role || '—'}`,
-    `Тариф: ${lead.tariff || '—'}`,
+    `Интерес: ${lead.tariff || '—'}`,
     `Комментарий: ${lead.comment || '—'}`,
     `Время: ${lead.createdAt}`,
     `ID: ${lead.id}`,

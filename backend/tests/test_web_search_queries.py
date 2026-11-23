@@ -7,11 +7,13 @@ from app.rag.document_fetch import select_relevant_excerpt
 from app.rag.source_policy import (
     classify_international_source,
     is_primary_evidence_source,
+    is_primary_guideline_source,
 )
 from app.rag.web_search import (
     _balanced_results,
     _build_queries,
     _detect_intent,
+    _document_type,
     _english_variant,
     _extract_focus,
     _rf_search_focus,
@@ -41,7 +43,7 @@ class ClinicalSearchPlanTests(unittest.TestCase):
             ("лечение", "treatment"),
         )
 
-    def test_rf_plan_contains_only_rf_queries_and_profiled_sources(self) -> None:
+    def test_rf_plan_contains_only_clinical_guideline_queries(self) -> None:
         queries = _build_queries(
             "Как лечить ишемический инсульт?",
             bilingual=False,
@@ -52,9 +54,8 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         self.assertTrue(queries)
         self.assertTrue(all(lang == "ru" for _, lang, _ in queries))
         self.assertTrue(any("cr.minzdrav.gov.ru" in q for q, _, _ in queries))
-        self.assertTrue(any("НМИЦ" in q for q, _, _ in queries))
-        self.assertTrue(any("журнал" in q for q, _, _ in queries))
         self.assertTrue(any(kind == "rf_society" for _, _, kind in queries))
+        self.assertFalse(any(kind in {"rf_institute", "rf_journal"} for _, _, kind in queries))
         self.assertTrue(all('"' not in q for q, _, _ in queries))
 
     def test_rf_focus_keeps_clinical_keywords_and_removes_search_noise(self) -> None:
@@ -66,17 +67,35 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         self.assertNotIn("актуальные", focus)
         self.assertNotIn("рекомендации", focus)
 
-    def test_rf_results_keep_source_type_coverage_and_reject_intl_domains(self) -> None:
+    def test_rf_results_keep_only_guidelines_and_reject_intl_domains(self) -> None:
+        self.assertEqual(
+            _document_type(
+                "rf_guideline",
+                "Обычная медицинская статья",
+                "https://journal.example.ru/article",
+                "Обзор литературы",
+            ),
+            "other",
+        )
+        self.assertEqual(
+            _document_type(
+                "rf_registry",
+                "Геморрагический инсульт",
+                "https://cr.minzdrav.gov.ru/view-cr/523_3",
+                "Официальная карточка",
+            ),
+            "clinical_guideline",
+        )
         hits = [
-            {"url": "https://cr.minzdrav.gov.ru/schema/1", "lang": "ru", "query_kind": "rf_registry", "relevance_score": 4, "year": 2025},
-            {"url": "https://nmic.example.ru/article", "lang": "ru", "query_kind": "rf_institute", "relevance_score": 3, "year": 2026},
-            {"url": "https://journal.example.ru/review", "lang": "ru", "query_kind": "rf_journal", "relevance_score": 2, "year": 2026},
-            {"url": "https://who.int/guideline", "lang": "ru", "query_kind": "rf_guideline", "relevance_score": 20, "year": 2026},
+            {"url": "https://cr.minzdrav.gov.ru/schema/1", "lang": "ru", "query_kind": "rf_registry", "document_type": "clinical_guideline", "relevance_score": 4, "year": 2025},
+            {"url": "https://society.example.ru/guideline", "lang": "ru", "query_kind": "rf_society", "document_type": "clinical_guideline", "relevance_score": 3, "year": 2026},
+            {"url": "https://journal.example.ru/review", "lang": "ru", "query_kind": "rf_journal", "document_type": "research_or_evidence_synthesis", "relevance_score": 20, "year": 2026},
+            {"url": "https://who.int/guideline", "lang": "ru", "query_kind": "rf_guideline", "document_type": "clinical_guideline", "relevance_score": 20, "year": 2026},
         ]
         selected = _balanced_results(hits, "rf", 2)
         self.assertTrue(any(item["query_kind"] == "rf_registry" for item in selected))
-        self.assertTrue(any(item["query_kind"] == "rf_institute" for item in selected))
-        self.assertTrue(any(item["query_kind"] == "rf_journal" for item in selected))
+        self.assertTrue(any(item["query_kind"] == "rf_society" for item in selected))
+        self.assertFalse(any(item["query_kind"] == "rf_journal" for item in selected))
         self.assertFalse(any("who.int" in item["url"] for item in selected))
 
     def test_rf_mock_does_not_return_international_recommendations(self) -> None:
@@ -85,7 +104,7 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         self.assertNotIn("ESC", content)
         self.assertNotIn("AHA", content)
 
-    def test_international_plan_contains_guidelines_and_literature(self) -> None:
+    def test_international_plan_contains_only_guideline_queries(self) -> None:
         queries = _build_queries(
             "Как лечить ишемический инсульт?",
             bilingual=True,
@@ -98,9 +117,9 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         self.assertTrue(any("site:who.int" in q for q, _, _ in queries))
         self.assertTrue(any("site:nice.org.uk" in q for q, _, _ in queries))
         self.assertTrue(any("NIH CDC" in q for q, _, _ in queries))
-        self.assertTrue(any("Cochrane" in q for q, _, _ in queries))
+        self.assertFalse(any("Cochrane" in q for q, _, _ in queries))
 
-    def test_drug_question_adds_regulatory_sources(self) -> None:
+    def test_drug_question_does_not_add_non_guideline_regulatory_sources(self) -> None:
         queries = _build_queries(
             "Дозировка цитиколина после ишемического инсульта",
             bilingual=True,
@@ -108,8 +127,8 @@ class ClinicalSearchPlanTests(unittest.TestCase):
             scope="intl",
             en_focus="citicoline ischemic stroke",
         )
-        self.assertTrue(any("fda.gov" in q or "dailymed" in q for q, _, _ in queries))
-        self.assertTrue(any("ema.europa.eu" in q or "bnf.nice" in q for q, _, _ in queries))
+        self.assertFalse(any("fda.gov" in q or "dailymed" in q for q, _, _ in queries))
+        self.assertFalse(any("ema.europa.eu" in q or "bnf.nice" in q for q, _, _ in queries))
 
     def test_international_source_policy_tracks_jurisdiction(self) -> None:
         eso = classify_international_source("https://eso-stroke.org/guidelines/example")
@@ -119,15 +138,15 @@ class ClinicalSearchPlanTests(unittest.TestCase):
 
     def test_intl_balancer_rejects_unknown_and_russian_domains(self) -> None:
         hits = [
-            {"url": "https://who.int/guideline", "lang": "en", "query_kind": "intl_who", "relevance_score": 12, "year": 2025},
-            {"url": "https://pubmed.ncbi.nlm.nih.gov/1/", "lang": "en", "query_kind": "pubmed", "relevance_score": 8, "year": 2024},
-            {"url": "https://cr.minzdrav.gov.ru/schema/1", "lang": "en", "query_kind": "intl_guideline", "relevance_score": 50, "year": 2026},
-            {"url": "https://random-blog.example/guideline", "lang": "en", "query_kind": "intl_guideline", "relevance_score": 100, "year": 2026},
+            {"url": "https://who.int/guideline", "lang": "en", "query_kind": "intl_who", "document_type": "clinical_guideline", "relevance_score": 12, "year": 2025},
+            {"url": "https://pubmed.ncbi.nlm.nih.gov/1/", "lang": "en", "query_kind": "pubmed", "document_type": "research_or_evidence_synthesis", "relevance_score": 8, "year": 2024},
+            {"url": "https://cr.minzdrav.gov.ru/schema/1", "lang": "en", "query_kind": "intl_guideline", "document_type": "clinical_guideline", "relevance_score": 50, "year": 2026},
+            {"url": "https://random-blog.example/guideline", "lang": "en", "query_kind": "intl_guideline", "document_type": "clinical_guideline", "relevance_score": 100, "year": 2026},
         ]
         selected = _balanced_results(hits, "intl", 4)
         urls = {item["url"] for item in selected}
         self.assertIn("https://who.int/guideline", urls)
-        self.assertIn("https://pubmed.ncbi.nlm.nih.gov/1/", urls)
+        self.assertNotIn("https://pubmed.ncbi.nlm.nih.gov/1/", urls)
         self.assertNotIn("https://cr.minzdrav.gov.ru/schema/1", urls)
         self.assertNotIn("https://random-blog.example/guideline", urls)
 
@@ -162,6 +181,20 @@ class ClinicalSearchPlanTests(unittest.TestCase):
         )
         self.assertFalse(
             is_primary_evidence_source("http://cr.minzdrav.gov.ru/view-cr/523_3")
+        )
+        self.assertTrue(
+            is_primary_guideline_source(
+                "https://cr.minzdrav.gov.ru/view-cr/523_3"
+            )
+        )
+        self.assertTrue(
+            is_primary_guideline_source("https://www.nice.org.uk/guidance/ng128")
+        )
+        self.assertFalse(
+            is_primary_guideline_source("https://www.fda.gov/drugs/example")
+        )
+        self.assertFalse(
+            is_primary_guideline_source("https://minzdrav.gov.ru/news/example")
         )
 
 

@@ -47,6 +47,70 @@ def _resolve(value: Any) -> Any:
     return getter() if callable(getter) else value
 
 
+def _same_pdf_object(left: Any, right: Any) -> bool:
+    if left is right or left == right:
+        return True
+    left_id = getattr(left, "idnum", None)
+    right_id = getattr(right, "idnum", None)
+    if left_id is not None or right_id is not None:
+        return (
+            left_id is not None
+            and right_id is not None
+            and left_id == right_id
+            and getattr(left, "generation", None) == getattr(right, "generation", None)
+        )
+    return _resolve(left) is _resolve(right)
+
+
+def _is_allowed_c2pa_embedding(root: Any, embedded_files_value: Any) -> bool:
+    """Allow only the inert C2PA provenance manifest added to generated PDFs."""
+
+    associated_files = _resolve(root.get("/AF"))
+    embedded_files = _resolve(embedded_files_value)
+    if not isinstance(associated_files, list) or len(associated_files) != 1:
+        return False
+    if not hasattr(embedded_files, "get") or embedded_files.get("/Kids") is not None:
+        return False
+
+    entries = _resolve(embedded_files.get("/Names"))
+    if not isinstance(entries, list) or len(entries) != 2:
+        return False
+    label, file_spec_ref = entries
+    if str(_resolve(label)) != "Content Credentials":
+        return False
+    if not _same_pdf_object(associated_files[0], file_spec_ref):
+        return False
+
+    file_spec = _resolve(file_spec_ref)
+    if not hasattr(file_spec, "get"):
+        return False
+    if file_spec.get("/Type") != "/Filespec":
+        return False
+    if file_spec.get("/AFRelationship") != "/C2PA_Manifest":
+        return False
+    if str(file_spec.get("/Subtype", "")).lstrip("/") != "application/c2pa":
+        return False
+    for key in ("/F", "/UF", "/Desc"):
+        if str(file_spec.get(key, "")) != "Content Credentials":
+            return False
+
+    embedded_streams = _resolve(file_spec.get("/EF"))
+    if not hasattr(embedded_streams, "get"):
+        return False
+    if not set(embedded_streams).issubset({"/F", "/UF"}) or not embedded_streams:
+        return False
+    stream_refs = [embedded_streams.get(key) for key in ("/F", "/UF") if embedded_streams.get(key)]
+    if not stream_refs or any(not _same_pdf_object(stream_refs[0], ref) for ref in stream_refs[1:]):
+        return False
+
+    stream = _resolve(stream_refs[0])
+    return bool(
+        hasattr(stream, "get")
+        and stream.get("/Type") == "/EmbeddedFile"
+        and str(stream.get("/Subtype", "")).lstrip("/") == "application/c2pa"
+    )
+
+
 def _contains_catalog_risk(reader: PdfReader) -> bool:
     root = _resolve(reader.trailer.get("/Root"))
     if not hasattr(root, "get"):
@@ -56,9 +120,13 @@ def _contains_catalog_risk(reader: PdfReader) -> bool:
         return True
 
     names = _resolve(root.get("/Names"))
-    if hasattr(names, "get") and (
-        names.get("/JavaScript") is not None or names.get("/EmbeddedFiles") is not None
-    ):
+    embedded_files = names.get("/EmbeddedFiles") if hasattr(names, "get") else None
+    if hasattr(names, "get") and names.get("/JavaScript") is not None:
+        return True
+    if embedded_files is not None:
+        if not _is_allowed_c2pa_embedding(root, embedded_files):
+            return True
+    elif root.get("/AF") is not None:
         return True
 
     acroform = _resolve(root.get("/AcroForm"))

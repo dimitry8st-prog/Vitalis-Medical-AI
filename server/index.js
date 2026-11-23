@@ -132,17 +132,21 @@ function sendHtml(filePath, res, privatePage = false) {
   });
 }
 
-app.get('/', (_req, res) => sendHtml(path.join(PUBLIC_DIR, 'index.html'), res));
-app.get('/app', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res, true));
-app.get('/app/', (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res, true));
+const sendCabinet = (_req, res) => sendHtml(path.join(WEB_DIR, 'app.html'), res, true);
+const sendAbout = (_req, res) => sendHtml(path.join(PUBLIC_DIR, 'index.html'), res);
+
+// Один рабочий интерфейс доступен сразу по основному адресу; /app сохранён для
+// совместимости со старыми закладками. Маркетинговое описание вынесено в /about.
+app.get(['/', '/index.html', '/app', '/app/'], sendCabinet);
+app.get(['/about', '/about/', '/landing', '/landing/'], sendAbout);
 
 app.use('/assets', express.static(path.join(WEB_DIR, 'assets')));
 app.use(express.static(PUBLIC_DIR));
 
 if (require.main === module) app.listen(PORT, () => {
   console.log(`Vitalis Node: http://localhost:${PORT}`);
-  console.log(`Лендинг:      http://localhost:${PORT}/`);
-  console.log(`Продукт:      http://localhost:${PORT}/app`);
+  console.log(`Кабинет:      http://localhost:${PORT}/`);
+  console.log(`О проекте:    http://localhost:${PORT}/about`);
   console.log(`AI proxy →    ${PYTHON_API_URL}`);
 });
 
