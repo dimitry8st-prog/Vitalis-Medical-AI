@@ -9,6 +9,21 @@ CLINICAL_GUIDELINE_DOCUMENT_TYPES = {
 CLINICAL_GUIDELINE_CONTENT_SCOPES = {
     "official_full_text_extracted",
 }
+ICHD3_URL = "https://ihs-headache.org/wp-content/uploads/2022/09/ICHD-3-Russian.pdf"
+ICHD3_SHA256 = "0c8ad2b7c2148bcea6c1b56133bdcf2aada208c37f5630f699c6ad3c06741f35"
+ICHD3_SCOPE = "official_classification_full_text"
+
+
+def is_ichd3_reference_meta(meta: Mapping[str, Any] | None) -> bool:
+    return bool(
+        meta
+        and meta.get("document_type") == "diagnostic_classification"
+        and meta.get("content_scope") == ICHD3_SCOPE
+        and meta.get("jurisdiction") == "INTL"
+        and meta.get("source_url") == ICHD3_URL
+        and meta.get("full_text_sha256") == ICHD3_SHA256
+        and _truthy(meta.get("full_text_checked"))
+    )
 
 
 def _truthy(value: Any) -> bool:

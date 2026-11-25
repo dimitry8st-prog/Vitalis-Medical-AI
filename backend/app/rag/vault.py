@@ -9,9 +9,9 @@ from pathlib import Path
 import faiss
 import numpy as np
 
-from app.rag.eligibility import is_clinical_guideline_meta
+from app.rag.eligibility import is_clinical_guideline_meta, is_ichd3_reference_meta
 
-INDEX_SCHEMA_VERSION = 2
+INDEX_SCHEMA_VERSION = 3
 
 
 def _tokenize(text: str) -> list[str]:
@@ -37,6 +37,14 @@ _SEARCH_STOPWORDS = {
 }
 _MKB_RE = re.compile(r"(?<![A-ZА-Я0-9])[A-ZА-Я]\d{2}(?:\.\d{1,4})?", re.I)
 _PAGE_RE = re.compile(r"(?m)^##\s+Страница\s+(\d+)\s*$")
+_CHUNK_PAGE_RE = re.compile(r"^\[Страница (\d+)\]")
+# Page numbers refer to the approved Russian ICHD-3 PDF.
+_ICHD3_MIGRAINE_SECTIONS = (
+    (re.compile(r"без аур|without aura", re.I), {20, 21}),
+    (re.compile(r"хроническ\w* мигрен|chronic migraine", re.I), {26, 27}),
+    (re.compile(r"с аур|with aura", re.I), {22, 23}),
+    (re.compile(r"избыточн\w* применени|medication.overuse|абузус", re.I), {98, 99}),
+)
 
 
 def _stem(token: str) -> str:
@@ -118,7 +126,7 @@ class VaultRAG:
         for fp in files:
             raw = fp.read_text(encoding="utf-8")
             meta, body = self._split_frontmatter(raw)
-            if not is_clinical_guideline_meta(meta):
+            if not (is_clinical_guideline_meta(meta) or is_ichd3_reference_meta(meta)):
                 self.excluded_files += 1
                 continue
             self.indexed_files += 1
@@ -172,11 +180,21 @@ class VaultRAG:
             return len(self.chunks)
         return self.build()
 
-    def search(self, query: str, k: int = 5) -> list[dict]:
+    def search(self, query: str, k: int = 5, *, classification: bool = False) -> list[dict]:
         if not self.index or not self.chunks:
             return []
         q = _hash_embed(query, self.dim).reshape(1, -1)
-        candidate_count = min(max(k * 32, 128), len(self.chunks))
+        reference_count = sum(is_ichd3_reference_meta(c.meta) for c in self.chunks)
+        if classification and not reference_count:
+            return []
+        candidate_count = len(self.chunks) if classification else min(
+            max(k * 32, 128) + reference_count, len(self.chunks),
+        )
+        preferred_pages = {
+            page for pattern, pages in _ICHD3_MIGRAINE_SECTIONS
+            if classification and pattern.search(query)
+            for page in pages
+        }
         scores, idxs = self.index.search(q, candidate_count)
         query_terms = _search_terms(query)
         query_codes = _mkb_codes(query)
@@ -185,6 +203,8 @@ class VaultRAG:
             if i < 0:
                 continue
             c = self.chunks[i]
+            if is_ichd3_reference_meta(c.meta) != classification:
+                continue
             title_terms = _search_terms(c.title)
             title_overlap = len(query_terms & title_terms)
             text_terms = _search_terms(c.text)
@@ -199,6 +219,10 @@ class VaultRAG:
                 rank_score += min(1.5, 0.35 * text_overlap)
             if query_codes & meta_codes:
                 rank_score += 2.0
+            if preferred_pages:
+                page = _CHUNK_PAGE_RE.match(c.text)
+                if page and int(page.group(1)) in preferred_pages:
+                    rank_score += 3.0
             rank_score += _source_priority(c.meta)
             ranked.append(
                 {
