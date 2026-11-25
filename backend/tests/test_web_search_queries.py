@@ -3,7 +3,6 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 import httpx
-
 from app.config import Settings
 from app.llm.deepseek import DeepSeekClient
 from app.rag.document_fetch import select_relevant_excerpt
