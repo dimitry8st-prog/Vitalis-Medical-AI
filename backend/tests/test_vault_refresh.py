@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.rag.eligibility import ICHD3_SCOPE, ICHD3_SHA256, ICHD3_URL
 from app.rag.vault import VaultRAG
 
 
@@ -19,6 +20,35 @@ def full_guideline(title: str, body: str, *, mkb_codes: str = "") -> str:
 
 
 class VaultRefreshTests(unittest.TestCase):
+    def test_only_the_approved_classification_has_separate_paginated_search(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault = root / "vault"
+            vault.mkdir()
+            reference = (
+                "---\n"
+                'title: "МКГБ-3 — мигрень"\n'
+                'document_type: "diagnostic_classification"\n'
+                f'content_scope: "{ICHD3_SCOPE}"\n'
+                'jurisdiction: "INTL"\n'
+                f'source_url: "{ICHD3_URL}"\n'
+                f'full_text_sha256: "{ICHD3_SHA256}"\n'
+                'full_text_checked: true\n'
+                "---\n\n"
+                "## Страница 21\n\nМигрень без ауры.\n\n"
+                "## Страница 153\n\nМигрень без ауры: дополнительные материалы.\n"
+            )
+            (vault / "ichd.md").write_text(reference, encoding="utf-8")
+            (vault / "other.md").write_text(
+                reference.replace(ICHD3_SHA256, "unverified"), encoding="utf-8",
+            )
+            rag = VaultRAG(vault, root / "index")
+            self.assertEqual(rag.load_or_build(), 2)
+            self.assertEqual(rag.search("мигрень без ауры"), [])
+            hits = rag.search("мигрень без ауры", classification=True)
+            self.assertEqual({hit["path"] for hit in hits}, {"ichd.md"})
+            self.assertTrue(hits[0]["text"].startswith("[Страница 21]"))
+
     def test_frontmatter_decodes_json_escaped_quotes(self):
         meta, _ = VaultRAG._split_frontmatter(
             '---\ntitle: "Тест"\norganization: "Общество \\"Нейро\\""\n---\nBody'
