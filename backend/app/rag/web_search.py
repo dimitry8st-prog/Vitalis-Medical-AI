@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import logging
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -19,6 +20,9 @@ from app.rag.source_policy import (
     is_international_evidence_source,
     is_russian_official,
 )
+
+logger = logging.getLogger(__name__)
+EUROPE_PMC_TIMEOUT_SECONDS = 5.0
 
 
 async def web_search(
@@ -760,19 +764,32 @@ def _balanced_results(
 
 async def _europe_pmc(query: str, max_results: int) -> list[dict[str, Any]]:
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
-                "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
-                params={
-                    "query": query,
-                    "format": "json",
-                    "pageSize": max_results,
-                    "resultType": "core",
-                },
-            )
-            response.raise_for_status()
-            rows = response.json().get("resultList", {}).get("result", [])
-    except Exception:
+        async with asyncio.timeout(EUROPE_PMC_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient(timeout=EUROPE_PMC_TIMEOUT_SECONDS) as client:
+                response = await client.get(
+                    "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+                    params={
+                        "query": query,
+                        "format": "json",
+                        "pageSize": max_results,
+                        "resultType": "core",
+                    },
+                )
+                response.raise_for_status()
+        rows = response.json()["resultList"]["result"]
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError("Unexpected result list")
+    except (TimeoutError, httpx.TimeoutException):
+        logger.warning("Europe PMC search unavailable: timeout")
+        return []
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Europe PMC search unavailable: HTTP %s", exc.response.status_code)
+        return []
+    except httpx.RequestError as exc:
+        logger.warning("Europe PMC search unavailable: %s", type(exc).__name__)
+        return []
+    except (KeyError, TypeError, ValueError):
+        logger.warning("Europe PMC search unavailable: invalid response")
         return []
 
     out: list[dict[str, Any]] = []

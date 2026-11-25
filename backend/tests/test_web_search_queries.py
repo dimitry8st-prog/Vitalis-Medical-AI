@@ -1,5 +1,8 @@
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
+
+import httpx
 
 from app.config import Settings
 from app.llm.deepseek import DeepSeekClient
@@ -13,11 +16,57 @@ from app.rag.web_search import (
     _build_queries,
     _detect_intent,
     _english_variant,
+    _europe_pmc,
     _extract_focus,
+    _literature_bundle,
     _rf_search_focus,
     web_search,
 )
 from app.services.ask import AskService
+
+
+class EuropePmcTests(unittest.IsolatedAsyncioTestCase):
+    async def test_timeout_preserves_pubmed_results_without_logging_query(self) -> None:
+        async def slow_response(_request):
+            await asyncio.sleep(1)
+            self.fail("Europe PMC should be cancelled at its deadline")
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(slow_response))
+        pubmed_results = [{"title": "PubMed fallback"}]
+        module = "app.rag.web_search"
+        with (
+            patch(f"{module}.httpx.AsyncClient", return_value=client),
+            patch(f"{module}.EUROPE_PMC_TIMEOUT_SECONDS", 0.05),
+            patch(f"{module}._pubmed", new=AsyncMock(return_value=pubmed_results)),
+            self.assertLogs(module, level="WARNING") as logs,
+        ):
+            results = await asyncio.wait_for(
+                _literature_bundle("private example query", 1, "fibromyalgia"),
+                timeout=0.5,
+            )
+
+        self.assertEqual(results, [(pubmed_results, "en", "pubmed")])
+        self.assertEqual(logs.output, [f"WARNING:{module}:Europe PMC search unavailable: timeout"])
+
+    async def test_empty_response_and_upstream_error_have_distinct_logs(self) -> None:
+        module = "app.rag.web_search"
+        for response, warning in (
+            (httpx.Response(200, json={"resultList": {"result": []}}), None),
+            (httpx.Response(503), "HTTP 503"),
+            (httpx.Response(200, json={"resultList": {"result": {}}}), "invalid response"),
+        ):
+            with self.subTest(status=response.status_code, warning=warning):
+                client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response))
+                with patch(f"{module}.httpx.AsyncClient", return_value=client):
+                    if warning is None:
+                        with self.assertNoLogs(module, level="WARNING"):
+                            self.assertEqual(await _europe_pmc("fibromyalgia", 1), [])
+                    else:
+                        with self.assertLogs(module, level="WARNING") as logs:
+                            self.assertEqual(await _europe_pmc("fibromyalgia", 1), [])
+                        self.assertEqual(
+                            logs.output, [f"WARNING:{module}:Europe PMC search unavailable: {warning}"]
+                        )
 
 
 class ClinicalSearchPlanTests(unittest.TestCase):
